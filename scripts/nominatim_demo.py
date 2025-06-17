@@ -24,7 +24,7 @@ class NominatimClient:
         if not self.api_endpoint:
             raise ValueError("API endpoint must not be empty")
 
-    def search(self, query: str) -> List[Tuple[float, float]]:
+    def geocode(self, query: str) -> List[Tuple[float, float]]:
         url = f"{self.api_endpoint}/search"
         params = {"format": "json", "q": query}
 
@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
 
     client = NominatimClient(api_endpoint)
     try:
-        data = client.search(args.place)
+        data = client.geocode(args.place)
     except NominatimError as exc:
         parser.error(str(exc))
     else:
