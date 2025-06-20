@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -48,28 +47,3 @@ class NominatimClient:
             raise NominatimError(f"Network error: {exc}") from exc
         except ValueError as exc:
             raise NominatimError("Invalid JSON received from API") from exc
-
-
-def main(argv: list[str] | None = None) -> None:  # noqa: D401
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Query a Nominatim instance")
-    parser.add_argument("--place", required=True, help="Query string to search for")
-
-    args = parser.parse_args(argv)
-
-    api_endpoint = os.getenv("API_ENDPOINT")
-    if not api_endpoint:
-        parser.error("API_ENDPOINT environment variable not set")
-
-    client = NominatimClient(api_endpoint)
-    try:
-        data = client.geocode(args.place)
-    except NominatimError as exc:
-        parser.error(str(exc))
-    else:
-        print(data)
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()
