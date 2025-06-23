@@ -2,6 +2,7 @@ import os
 
 from scripts.nominatim_client import NominatimClient, NominatimError
 from scripts.overpass_client import fetch_overpass
+import pandas as pd
 
 
 def main(argv: list[str] | None = None) -> None:  # noqa: D401
@@ -55,7 +56,28 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
     except NominatimError as exc:
         parser.error(str(exc))
     else:
-        print(data, f"共抓到 {len(elements)} 筆")
+        rows = []
+        for el in elements:
+            # 1) 抓座標：node 直接用 lat/lon；way/relation 用 center
+            lat = el.get("lat") or el.get("center", {}).get("lat")
+            lon = el.get("lon") or el.get("center", {}).get("lon")
+
+            # 2) 基本欄位 ( + tags 攤平)
+            row = {
+                "osmid": el["id"],
+                "osmtype": el["type"],
+                "lat": lat,
+                "lon": lon,
+                # **el.get("tags", {})  # 把 tags 字典整個拆進來
+                "tourism": el.get("tags", {}).get("tourism"),
+                "name": el.get("tags", {}).get("name"),
+            }
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        print(data)
+        print(df)
+        print(f"共抓到 {len(elements)} 筆")
 
 
 if __name__ == "__main__":  # pragma: no cover
