@@ -37,8 +37,6 @@ def get_isochrones(
             msg = data["error"].get("message", repr(data["error"]))
             raise RuntimeError(f"ORS API error {code}: {msg}")
 
-        return data
-
     # ① 連線
     except (Timeout, ConnectionError) as e:
         logging.error("network failure: %s", e)
@@ -59,3 +57,6 @@ def get_isochrones(
     except JSONDecodeError as e:
         logging.error("invalid JSON from upstream: %s", e)
         raise JSONDecodeError(f"json decode error", e.doc, e.pos)
+
+    else:
+        return data
