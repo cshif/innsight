@@ -2,6 +2,7 @@ import os
 
 from scripts.nominatim_client import NominatimClient, NominatimError
 from scripts.overpass_client import fetch_overpass
+from scripts.ors_client import get_isochrones
 import pandas as pd
 
 
@@ -78,6 +79,11 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
         print(data)
         print(df)
         print(f"共抓到 {len(elements)} 筆")
+
+        lat_str, lon_str = data[0]
+        coord: tuple[float, float] = (float(lon_str), float(lat_str))
+        isochrones = get_isochrones('driving-car', [coord], [600])
+        print(isochrones)
 
 
 if __name__ == "__main__":  # pragma: no cover
