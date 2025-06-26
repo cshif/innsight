@@ -3,6 +3,7 @@ import os
 from scripts.nominatim_client import NominatimClient, NominatimError
 from scripts.overpass_client import fetch_overpass
 from scripts.ors_client import get_isochrones
+from scripts.point_in_polygon import main as point_in_polygon
 import pandas as pd
 
 
@@ -84,6 +85,12 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
         coord: tuple[float, float] = (float(lon_str), float(lat_str))
         isochrones = get_isochrones('driving-car', [coord], [600])
         print(isochrones)
+
+        is_point_in_polygon = point_in_polygon(
+            isochrones["features"][0]["geometry"]["coordinates"][0],
+            (float(data[0][1]), float(data[0][0]))  # (lon, lat)
+        )
+        print(is_point_in_polygon)
 
 
 if __name__ == "__main__":  # pragma: no cover
