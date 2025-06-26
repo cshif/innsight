@@ -1,4 +1,4 @@
-import os
+import os, time
 
 from scripts.nominatim_client import NominatimClient, NominatimError
 from scripts.overpass_client import fetch_overpass
@@ -83,8 +83,21 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
 
         lat_str, lon_str = data[0]
         coord: tuple[float, float] = (float(lon_str), float(lat_str))
-        isochrones = get_isochrones('driving-car', [coord], [600])
+
+        start = time.perf_counter()
+        isochrones = get_isochrones('driving-car', (coord,), (600,))
         print(isochrones)
+        t1 = time.perf_counter() - start
+
+        start = time.perf_counter()
+        isochrones = get_isochrones('driving-car', (coord,), (600,))
+        print(isochrones)
+        t2 = time.perf_counter() - start
+
+        # info = isochrones.cache_info()
+        # print(f"cache_info: {info}")
+
+        print(f"第一次花了 {t1:.4f}s，第二次花了 {t2:.4f}s")
 
         is_point_in_polygon = point_in_polygon(
             isochrones["features"][0]["geometry"]["coordinates"][0],

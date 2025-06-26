@@ -1,16 +1,18 @@
 import os, requests, logging
+from functools import lru_cache
 from json import JSONDecodeError
 from requests.exceptions import Timeout, ConnectionError, HTTPError
 from dotenv import load_dotenv
-from typing import List, Tuple, Dict, Any
+from typing import Tuple, Dict, Any
 
 load_dotenv()
 
 
+@lru_cache(maxsize=128)
 def get_isochrones(
         profile: str,
-        locations: List[Tuple[float, float]],
-        max_range: List[int]
+        locations: Tuple[Tuple[float, float], ...],
+        max_range: Tuple[int, ...]
 ) -> Dict[str, Any]:
     try:
         resp = requests.post(
