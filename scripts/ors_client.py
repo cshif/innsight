@@ -9,6 +9,11 @@ from shapely.geometry import Polygon
 load_dotenv()
 
 
+class IsochroneError(Exception):
+    """自定義異常類，當 isochrone 請求失敗且無快取可用時拋出"""
+    pass
+
+
 def retry_on_network_error(max_attempts=3, delay=1, backoff=2):
     def decorator(func):
         @wraps(func)
@@ -103,8 +108,8 @@ def fallback_cache(maxsize=128, ttl_hours=24):
                 
                 return result
                 
-            except Exception as e:
-                # 失敗時檢查是否有快取可回退（包括過期的快取）
+            except (Timeout, ConnectionError, HTTPError, JSONDecodeError) as e:
+                # 只對網路相關錯誤進行快取回退
                 if key in _fallback_cache:
                     cached_result, cached_time = _fallback_cache[key]
                     age_hours = (current_time - cached_time) / 3600
@@ -114,8 +119,8 @@ def fallback_cache(maxsize=128, ttl_hours=24):
                     )
                     return cached_result
                 else:
-                    # 沒有快取時重新拋出例外
-                    raise
+                    # 沒有快取時拋出自定義錯誤
+                    raise IsochroneError(f"Isochrone request failed and no cache available: {str(e)}") from e
         
         # 新增清理快取的方法
         wrapper.cache_clear = lambda: _fallback_cache.clear()

@@ -8,7 +8,7 @@ from requests.exceptions import Timeout, ConnectionError, HTTPError
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from scripts.ors_client import get_isochrones, retry_on_network_error
+from scripts.ors_client import get_isochrones, retry_on_network_error, IsochroneError
 from shapely.geometry import Polygon
 
 
@@ -185,7 +185,7 @@ class TestGetIsochrones:
         mock_post.side_effect = HTTPError(response=mock_response)
         
         # Act & Assert
-        with pytest.raises(HTTPError):
+        with pytest.raises(IsochroneError, match="Isochrone request failed and no cache available"):
             get_isochrones(
                 profile="invalid-profile",
                 locations=((8.681495, 49.41461),),
@@ -204,7 +204,7 @@ class TestGetIsochrones:
         get_isochrones.cache_clear()
         
         # Act & Assert
-        with pytest.raises(HTTPError, match="Upstream temporary failure"):
+        with pytest.raises(IsochroneError, match="Isochrone request failed and no cache available"):
             get_isochrones(
                 profile="driving-car",
                 locations=((8.681495, 49.41461),),
@@ -221,7 +221,7 @@ class TestGetIsochrones:
         get_isochrones.cache_clear()
         
         # Act & Assert
-        with pytest.raises(ConnectionError):
+        with pytest.raises(IsochroneError, match="Isochrone request failed and no cache available"):
             get_isochrones(
                 profile="driving-car",
                 locations=((8.681495, 49.41461),),
@@ -238,7 +238,7 @@ class TestGetIsochrones:
         get_isochrones.cache_clear()
         
         # Act & Assert
-        with pytest.raises(Timeout):
+        with pytest.raises(IsochroneError, match="Isochrone request failed and no cache available"):
             get_isochrones(
                 profile="driving-car",
                 locations=((8.681495, 49.41461),),
@@ -259,7 +259,7 @@ class TestGetIsochrones:
         get_isochrones.cache_clear()
         
         # Act & Assert
-        with pytest.raises(ConnectionError, match="Invalid response format"):
+        with pytest.raises(IsochroneError, match="Isochrone request failed and no cache available"):
             get_isochrones(
                 profile="driving-car",
                 locations=((8.681495, 49.41461),),
@@ -386,8 +386,8 @@ class TestGetIsochrones:
         get_isochrones.cache_clear()
         mock_post.side_effect = ConnectionError("Network error")
         
-        # Act & Assert - 沒有快取時應該拋出錯誤
-        with pytest.raises(ConnectionError):
+        # Act & Assert - 沒有快取時應該拋出 IsochroneError
+        with pytest.raises(IsochroneError, match="Isochrone request failed and no cache available"):
             get_isochrones(
                 profile="driving-car",
                 locations=((8.681495, 49.41461),),
