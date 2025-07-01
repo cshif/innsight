@@ -1,10 +1,11 @@
 import os
-import pytest
-from unittest.mock import Mock, patch
-from requests.exceptions import Timeout, ConnectionError, HTTPError
-from json import JSONDecodeError
-
 import sys
+from json import JSONDecodeError
+from unittest.mock import Mock, patch
+
+import pytest
+from requests.exceptions import Timeout, ConnectionError, HTTPError
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
 from scripts.ors_client import get_isochrones, retry_on_network_error
@@ -327,3 +328,70 @@ class TestGetIsochrones:
         )
         
         assert result == []
+    
+    @patch.dict(os.environ, {'ORS_URL': 'https://api.openrouteservice.org/v2/directions', 'ORS_API_KEY': 'test_key'})
+    @patch('requests.post')
+    @patch('time.time')  # Mock 時間讓快取過期
+    def test_get_isochrones_fallback_cache_success_then_failure(self, mock_time, mock_post):
+        # Arrange
+        get_isochrones.cache_clear()
+        start_time = 1000000
+        mock_time.return_value = start_time
+        
+        # 第一次成功呼叫
+        mock_response_success = Mock()
+        mock_response_success.status_code = 200
+        mock_response_success.json.return_value = {
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {"value": 600},
+                    "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]}
+                }
+            ]
+        }
+        mock_post.return_value = mock_response_success
+        
+        # Act - 第一次成功呼叫
+        result1 = get_isochrones(
+            profile="driving-car",
+            locations=((8.681495, 49.41461),),
+            max_range=(600,)
+        )
+        
+        # 模擬時間過去 25 小時（超過 24 小時 TTL）
+        mock_time.return_value = start_time + 25 * 3600
+        
+        # 第二次失敗呼叫，應該嘗試 API 然後回退到快取
+        mock_post.side_effect = ConnectionError("Network error")
+        
+        # Act - 第二次失敗呼叫
+        result2 = get_isochrones(
+            profile="driving-car",
+            locations=((8.681495, 49.41461),),
+            max_range=(600,)
+        )
+        
+        # Assert
+        assert isinstance(result1, list)
+        assert len(result1) == 1
+        assert isinstance(result1[0], Polygon)
+        assert result1 == result2  # 回退的快取結果應該相同
+        assert mock_post.call_count == 4  # 1次成功 + 3次重試失敗
+    
+    @patch.dict(os.environ, {'ORS_URL': 'https://api.openrouteservice.org/v2/directions', 'ORS_API_KEY': 'test_key'})
+    @patch('requests.post')
+    def test_get_isochrones_fallback_cache_no_cache_available(self, mock_post):
+        # Arrange
+        get_isochrones.cache_clear()
+        mock_post.side_effect = ConnectionError("Network error")
+        
+        # Act & Assert - 沒有快取時應該拋出錯誤
+        with pytest.raises(ConnectionError):
+            get_isochrones(
+                profile="driving-car",
+                locations=((8.681495, 49.41461),),
+                max_range=(600,)
+            )
+        
+        assert mock_post.call_count == 3  # 3次重試失敗

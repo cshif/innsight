@@ -1,9 +1,9 @@
 import os, requests, logging, time
-from functools import lru_cache, wraps
+from functools import wraps
 from json import JSONDecodeError
 from requests.exceptions import Timeout, ConnectionError, HTTPError
 from dotenv import load_dotenv
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 from shapely.geometry import Polygon
 
 load_dotenv()
@@ -54,7 +54,81 @@ def retry_on_network_error(max_attempts=3, delay=1, backoff=2):
     return decorator
 
 
-@lru_cache(maxsize=128)
+# 自定義快取儲存
+_fallback_cache: Dict[Tuple, Tuple[List[Polygon], float]] = {}  # (key, (result, timestamp))
+
+
+def fallback_cache(maxsize=128, ttl_hours=24):
+    """
+    快取裝飾器，失敗時回退到過期快取
+    - maxsize: 最大快取項目數
+    - ttl_hours: 快取有效期（小時）
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # 建立快取鍵
+            key = (func.__name__, args, tuple(sorted(kwargs.items())))
+            current_time = time.time()
+            
+            # 檢查是否有有效的快取
+            if key in _fallback_cache:
+                cached_result, cached_time = _fallback_cache[key]
+                age_hours = (current_time - cached_time) / 3600
+                
+                # 如果快取仍在有效期內，直接返回
+                if age_hours <= ttl_hours:
+                    return cached_result
+            
+            try:
+                # 嘗試執行函數
+                result = func(*args, **kwargs)
+                # 成功時更新快取
+                _fallback_cache[key] = (result, current_time)
+                
+                # 清理過期快取項目
+                if len(_fallback_cache) > maxsize:
+                    expired_keys = [
+                        k for k, (_, timestamp) in _fallback_cache.items()
+                        if current_time - timestamp > ttl_hours * 3600
+                    ]
+                    for expired_key in expired_keys:
+                        _fallback_cache.pop(expired_key, None)
+                    
+                    # 如果還是太多，移除最舊的項目
+                    if len(_fallback_cache) > maxsize:
+                        oldest_key = min(_fallback_cache.keys(), 
+                                       key=lambda k: _fallback_cache[k][1])
+                        _fallback_cache.pop(oldest_key, None)
+                
+                return result
+                
+            except Exception as e:
+                # 失敗時檢查是否有快取可回退（包括過期的快取）
+                if key in _fallback_cache:
+                    cached_result, cached_time = _fallback_cache[key]
+                    age_hours = (current_time - cached_time) / 3600
+                    logging.warning(
+                        "API call failed, falling back to cached result (%.1f hours old): %s",
+                        age_hours, str(e)
+                    )
+                    return cached_result
+                else:
+                    # 沒有快取時重新拋出例外
+                    raise
+        
+        # 新增清理快取的方法
+        wrapper.cache_clear = lambda: _fallback_cache.clear()
+        wrapper.cache_info = lambda: {
+            'size': len(_fallback_cache),
+            'items': {k: (len(v[0]), v[1]) for k, v in _fallback_cache.items()}
+        }
+        
+        return wrapper
+    return decorator
+
+
+@fallback_cache(maxsize=128, ttl_hours=24)
 @retry_on_network_error(max_attempts=3, delay=1, backoff=2)
 def get_isochrones(
         profile: str,
