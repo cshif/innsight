@@ -8,6 +8,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
 from scripts.ors_client import get_isochrones, retry_on_network_error
+from shapely.geometry import Polygon
 
 
 class TestRetryOnNetworkError:
@@ -119,7 +120,7 @@ class TestGetIsochrones:
                 {
                     "type": "Feature",
                     "properties": {"value": 600},
-                    "geometry": {"type": "Polygon", "coordinates": []}
+                    "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]}
                 }
             ]
         }
@@ -133,8 +134,9 @@ class TestGetIsochrones:
         )
         
         # Assert
-        assert "features" in result
-        assert len(result["features"]) == 1
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], Polygon)
         
         mock_post.assert_called_once_with(
             url="https://api.openrouteservice.org/v2/directions/isochrones/driving-car",
@@ -291,6 +293,7 @@ class TestGetIsochrones:
         # Assert
         assert mock_post.call_count == 1
         assert result1 == result2
+        assert isinstance(result1, list)
     
     @patch.dict(os.environ, {'ORS_URL': 'https://api.openrouteservice.org/v2/directions', 'ORS_API_KEY': 'test_key'})
     @patch('requests.post')
@@ -323,4 +326,4 @@ class TestGetIsochrones:
             timeout=(5, 30)
         )
         
-        assert result == {"features": []}
+        assert result == []

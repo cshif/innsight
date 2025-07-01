@@ -3,7 +3,8 @@ from functools import lru_cache, wraps
 from json import JSONDecodeError
 from requests.exceptions import Timeout, ConnectionError, HTTPError
 from dotenv import load_dotenv
-from typing import Tuple, Dict, Any
+from typing import Tuple, List
+from shapely.geometry import Polygon
 
 load_dotenv()
 
@@ -59,7 +60,7 @@ def get_isochrones(
         profile: str,
         locations: Tuple[Tuple[float, float], ...],
         max_range: Tuple[int, ...]
-) -> Dict[str, Any]:
+) -> List[Polygon]:
     resp = requests.post(
         url=f"{os.getenv('ORS_URL')}/isochrones/{profile}",
         json={"locations": locations, "range": max_range},
@@ -79,4 +80,12 @@ def get_isochrones(
         msg = data["error"].get("message", repr(data["error"]))
         raise RuntimeError(f"ORS API error {code}: {msg}")
 
-    return data
+    # 轉換 GeoJSON 特徵為 Shapely 多邊形
+    polygons = []
+    if "features" in data:
+        for feature in data["features"]:
+            if feature.get("geometry", {}).get("type") == "Polygon":
+                coords = feature["geometry"]["coordinates"][0]  # 外環座標
+                polygons.append(Polygon(coords))
+    
+    return polygons

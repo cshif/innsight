@@ -86,12 +86,12 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
 
         start = time.perf_counter()
         isochrones = get_isochrones('driving-car', (coord,), (600,))
-        print(isochrones)
+        print(f"取得 {len(isochrones)} 個多邊形")
         t1 = time.perf_counter() - start
 
         start = time.perf_counter()
         isochrones = get_isochrones('driving-car', (coord,), (600,))
-        print(isochrones)
+        print(f"取得 {len(isochrones)} 個多邊形")
         t2 = time.perf_counter() - start
 
         # info = isochrones.cache_info()
@@ -99,11 +99,14 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
 
         print(f"第一次花了 {t1:.4f}s，第二次花了 {t2:.4f}s")
 
-        is_point_in_polygon = point_in_polygon(
-            isochrones["features"][0]["geometry"]["coordinates"][0],
-            (float(data[0][1]), float(data[0][0]))  # (lon, lat)
-        )
-        print(is_point_in_polygon)
+        if isochrones:
+            # 使用第一個多邊形的外環座標
+            polygon_coords = list(isochrones[0].exterior.coords)
+            is_point_in_polygon = point_in_polygon(
+                polygon_coords,
+                (float(data[0][1]), float(data[0][0]))  # (lon, lat)
+            )
+            print(is_point_in_polygon)
 
 
 if __name__ == "__main__":  # pragma: no cover
