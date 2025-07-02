@@ -102,8 +102,10 @@ def fallback_cache(maxsize=128, ttl_hours=24):
                     
                     # 如果還是太多，移除最舊的項目
                     if len(_fallback_cache) > maxsize:
-                        oldest_key = min(_fallback_cache.keys(), 
-                                       key=lambda k: _fallback_cache[k][1])
+                        oldest_key = min(
+                            _fallback_cache.keys(),
+                            key=lambda k: _fallback_cache[k][1]
+                        )
                         _fallback_cache.pop(oldest_key, None)
                 
                 return result
@@ -135,7 +137,7 @@ def fallback_cache(maxsize=128, ttl_hours=24):
 
 @fallback_cache(maxsize=128, ttl_hours=24)
 @retry_on_network_error(max_attempts=3, delay=1, backoff=2)
-def get_isochrones(
+def _fetch_isochrones_from_api(
         profile: str,
         locations: Tuple[Tuple[float, float], ...],
         max_range: Tuple[int, ...]
@@ -168,3 +170,33 @@ def get_isochrones(
                 polygons.append(Polygon(coords))
     
     return polygons
+
+
+def get_isochrones_by_minutes(
+    coord: Tuple[float, float], 
+    intervals: List[int],
+    profile: str = 'driving-car'
+) -> List[List[Polygon]]:
+    """
+    根據分鐘間隔獲取等時圈。
+    
+    Args:
+        coord: 座標 (lon, lat)
+        intervals: 時間間隔列表（分鐘）
+        profile: 交通模式，預設為 'driving-car'
+    
+    Returns:
+        等時圈列表，每個元素對應一個時間間隔
+    """
+    # 轉換分鐘為秒並進行單次 API 調用
+    max_range = tuple(minutes * 60 for minutes in intervals)
+    all_polygons = _fetch_isochrones_from_api(profile, (coord,), max_range)
+    
+    # ORS API 對每個時間範圍返回一個多邊形
+    # 將單個多邊形列表轉換為列表的列表格式以保持一致性
+    return [[polygon] for polygon in all_polygons]
+
+# 將快取方法暴露出來
+get_isochrones_by_minutes.cache_info = _fetch_isochrones_from_api.cache_info
+get_isochrones_by_minutes.cache_clear = _fetch_isochrones_from_api.cache_clear
+
