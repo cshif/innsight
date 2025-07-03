@@ -8,6 +8,11 @@ from shapely.geometry import Polygon
 DEFAULT_BUFFER = 1e-5
 
 
+class TierError(Exception):
+    """Tier 分配過程中的錯誤"""
+    pass
+
+
 def assign_tier(
         df: pd.DataFrame,
         polygons: List[Union[Polygon, List[Polygon]]],
@@ -29,6 +34,22 @@ def assign_tier(
     """
     # 複製輸入的 DataFrame
     gdf = df.copy()
+    
+    # 驗證必要欄位是否存在
+    if 'lat' not in df.columns or 'lon' not in df.columns:
+        raise TierError("DataFrame 必須包含 'lat' 和 'lon' 欄位")
+    
+    # 檢查是否有缺失的緯度或經度值
+    missing_lat = df['lat'].isna().any()
+    missing_lon = df['lon'].isna().any()
+    
+    if missing_lat or missing_lon:
+        missing_info = []
+        if missing_lat:
+            missing_info.append("緯度")
+        if missing_lon:
+            missing_info.append("經度")
+        raise TierError(f"缺少{' 或 '.join(missing_info)}")
     
     # 處理 polygons 輸入，統一轉換為 Polygon 物件
     processed_polygons = []

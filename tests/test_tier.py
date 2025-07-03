@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 from shapely.geometry import Point, Polygon
-from scripts.tier import assign_tier
+from scripts.tier import assign_tier, TierError
 
 
 def create_test_polygons():
@@ -135,6 +135,63 @@ def test_assign_tier_with_buffer():
     # 如果邊界點原本 tier 為 2，緩衝後應該變為 3
     if tier_no_buffer == 2:
         assert tier_with_buffer == 3, f"邊界點緩衝後應該從 tier 2 提升到 tier 3，實際為 {tier_with_buffer}"
+
+
+def test_assign_tier_missing_lat_lon():
+    """測試 assign_tier 函數的缺失緯度或經度錯誤處理。"""
+    # 建立測試多邊形
+    isochrones_15, isochrones_30, isochrones_60 = create_test_polygons()
+    polygons = [isochrones_15, isochrones_30, isochrones_60]
+    
+    # 測試 1: 缺失緯度
+    df_missing_lat = pd.DataFrame([
+        {"name": "X", "lat": None, "lon": 127.9}
+    ])
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df_missing_lat, polygons)
+    
+    assert "缺少緯度" in str(exc_info.value)
+    
+    # 測試 2: 缺失經度  
+    df_missing_lon = pd.DataFrame([
+        {"name": "Y", "lat": 26.7, "lon": None}
+    ])
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df_missing_lon, polygons)
+    
+    assert "缺少經度" in str(exc_info.value)
+    
+    # 測試 3: 同時缺失緯度和經度
+    df_missing_both = pd.DataFrame([
+        {"name": "Z", "lat": None, "lon": None}
+    ])
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df_missing_both, polygons)
+    
+    assert "缺少緯度 或 經度" in str(exc_info.value)
+    
+    # 測試 4: 缺失 lat 欄位
+    df_no_lat_column = pd.DataFrame([
+        {"name": "A", "lon": 127.9}
+    ])
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df_no_lat_column, polygons)
+    
+    assert "必須包含 'lat' 和 'lon' 欄位" in str(exc_info.value)
+    
+    # 測試 5: 缺失 lon 欄位
+    df_no_lon_column = pd.DataFrame([
+        {"name": "B", "lat": 26.7}
+    ])
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df_no_lon_column, polygons)
+    
+    assert "必須包含 'lat' 和 'lon' 欄位" in str(exc_info.value)
 
 
 if __name__ == "__main__":
