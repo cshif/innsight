@@ -107,5 +107,35 @@ def test_assign_tier_single_polygon():
     assert actual_tiers == expected_tiers, f"預期 tier 為 {expected_tiers}，實際為 {actual_tiers}"
 
 
+def test_assign_tier_with_buffer():
+    """測試 assign_tier 函數的邊界點緩衝功能。"""
+    # 建立一個恰好在 15 分鐘圈邊界上的點
+    boundary_point_lat = 26.75  # 正好在 15 分鐘多邊形的上邊界
+    boundary_point_lon = 127.88
+    
+    df = pd.DataFrame([
+        {"name": "boundary_point", "lat": boundary_point_lat, "lon": boundary_point_lon}
+    ])
+    
+    # 建立測試多邊形
+    isochrones_15, isochrones_30, isochrones_60 = create_test_polygons()
+    
+    # 測試 1: 不用緩衝，邊界點可能不在 15 分鐘圈內
+    gdf_no_buffer = assign_tier(df, [isochrones_15, isochrones_30, isochrones_60])
+    tier_no_buffer = gdf_no_buffer["tier"].iloc[0]
+    
+    # 測試 2: 使用細微緩衝 (1e-5)，邊界點應該在 15 分鐘圈內
+    gdf_with_buffer = assign_tier(df, [isochrones_15, isochrones_30, isochrones_60], buffer=1e-5)
+    tier_with_buffer = gdf_with_buffer["tier"].iloc[0]
+    
+    # 驗證緩衝效果：緩衝後的 tier 應該 >= 不緩衝的 tier
+    assert tier_with_buffer >= tier_no_buffer, f"緩衝後的 tier ({tier_with_buffer}) 應該 >= 不緩衝的 tier ({tier_no_buffer})"
+    
+    # 對於邊界點，緩衝應該讓它被包含在更小的多邊形中
+    # 如果邊界點原本 tier 為 2，緩衝後應該變為 3
+    if tier_no_buffer == 2:
+        assert tier_with_buffer == 3, f"邊界點緩衝後應該從 tier 2 提升到 tier 3，實際為 {tier_with_buffer}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

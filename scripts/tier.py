@@ -4,8 +4,15 @@ from shapely.geometry import Point
 from typing import List, Union
 from shapely.geometry import Polygon
 
+# 預設緩衝距離，用於處理邊界點
+DEFAULT_BUFFER = 1e-5
 
-def assign_tier(df: pd.DataFrame, polygons: List[Union[Polygon, List[Polygon]]]) -> gpd.GeoDataFrame:
+
+def assign_tier(
+        df: pd.DataFrame,
+        polygons: List[Union[Polygon, List[Polygon]]],
+        buffer: float = DEFAULT_BUFFER
+) -> gpd.GeoDataFrame:
     """
     根據多邊形包含關係為點位分配等級。
     
@@ -15,6 +22,7 @@ def assign_tier(df: pd.DataFrame, polygons: List[Union[Polygon, List[Polygon]]])
             多邊形列表，依據等級排序（較小的多邊形獲得較高等級）
             可以是 Polygon 或 List[Polygon]（自動取第一個）
             例如：[isochrones_15, isochrones_30, isochrones_60] 其中 isochrones_15 獲得 tier=3
+        buffer: 對多邊形進行緩衝的距離，用於處理邊界點（預設 DEFAULT_BUFFER = 1e-5）
     
     Returns:
         包含原始資料加上 'tier' 欄位和 Point 幾何的 GeoDataFrame
@@ -27,10 +35,16 @@ def assign_tier(df: pd.DataFrame, polygons: List[Union[Polygon, List[Polygon]]])
     for polygon_input in polygons:
         if isinstance(polygon_input, (list, tuple)) and len(polygon_input) > 0:
             # 如果是列表（如 List[Polygon]），取第一個元素
-            processed_polygons.append(polygon_input[0])
+            polygon = polygon_input[0]
         else:
             # 已經是 Polygon
-            processed_polygons.append(polygon_input)
+            polygon = polygon_input
+        
+        # 如果指定了緩衝距離，對多邊形進行緩衝
+        if buffer > 0:
+            polygon = polygon.buffer(buffer)
+        
+        processed_polygons.append(polygon)
     
     # 從 lat/lon 建立 Point 幾何
     geometry = [Point(lon, lat) for lat, lon in zip(df['lat'], df['lon'])]
