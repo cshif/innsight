@@ -53,19 +53,35 @@ def assign_tier(
     
     # 處理 polygons 輸入，統一轉換為 Polygon 物件
     processed_polygons = []
-    for polygon_input in polygons:
-        if isinstance(polygon_input, (list, tuple)) and len(polygon_input) > 0:
-            # 如果是列表（如 List[Polygon]），取第一個元素
-            polygon = polygon_input[0]
-        else:
-            # 已經是 Polygon
-            polygon = polygon_input
-        
-        # 如果指定了緩衝距離，對多邊形進行緩衝
-        if buffer > 0:
-            polygon = polygon.buffer(buffer)
-        
-        processed_polygons.append(polygon)
+    for i, polygon_input in enumerate(polygons):
+        try:
+            if isinstance(polygon_input, (list, tuple)):
+                if len(polygon_input) == 0:
+                    raise TierError(f"第{i+1}層多邊形格式不正確：列表不能為空")
+                # 如果是列表（如 List[Polygon]），取第一個元素
+                polygon = polygon_input[0]
+                # 驗證列表中的第一個元素是否為 Polygon
+                if not isinstance(polygon, Polygon):
+                    raise TierError(f"第{i+1}層多邊形格式不正確：列表中的元素必須是 Polygon 物件，實際為 {type(polygon).__name__}")
+            else:
+                # 應該是 Polygon
+                polygon = polygon_input
+                # 驗證是否為 Polygon
+                if not isinstance(polygon, Polygon):
+                    raise TierError(f"第{i+1}層多邊形格式不正確：必須是 Polygon 物件，實際為 {type(polygon).__name__}")
+            
+            # 如果指定了緩衝距離，對多邊形進行緩衝
+            if buffer > 0:
+                polygon = polygon.buffer(buffer)
+            
+            processed_polygons.append(polygon)
+            
+        except TierError:
+            # 重新拋出 TierError
+            raise
+        except (AttributeError, TypeError) as e:
+            # 處理其他可能的類型錯誤
+            raise TierError(f"第{i+1}層多邊形格式不正確：{str(e)}")
     
     # 建立 GeoDataFrame
     geometry = [Point(lon, lat) for lat, lon in zip(df['lat'], df['lon'])]

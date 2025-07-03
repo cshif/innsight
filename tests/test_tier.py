@@ -194,5 +194,60 @@ def test_assign_tier_missing_lat_lon():
     assert "必須包含 'lat' 和 'lon' 欄位" in str(exc_info.value)
 
 
+def test_assign_tier_invalid_polygon():
+    """測試 assign_tier 函數的無效多邊形錯誤處理。"""
+    # 建立測試 DataFrame
+    df = pd.DataFrame([
+        {"name": "A", "lat": 26.7, "lon": 127.88}
+    ])
+    
+    # 建立有效的多邊形
+    isochrones_15, isochrones_30, isochrones_60 = create_test_polygons()
+    
+    # 測試 1: 第二層多邊形是字串
+    polys_with_string = [isochrones_15[0], "not a polygon", isochrones_60[0]]
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df, polys_with_string)
+    
+    assert "第2層多邊形格式不正確" in str(exc_info.value)
+    assert "必須是 Polygon 物件，實際為 str" in str(exc_info.value)
+    
+    # 測試 2: 第三層多邊形是整數
+    polys_with_int = [isochrones_15[0], isochrones_30[0], 123]
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df, polys_with_int)
+    
+    assert "第3層多邊形格式不正確" in str(exc_info.value)
+    assert "必須是 Polygon 物件，實際為 int" in str(exc_info.value)
+    
+    # 測試 3: 第一層多邊形是 None
+    polys_with_none = [None, isochrones_30[0], isochrones_60[0]]
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df, polys_with_none)
+    
+    assert "第1層多邊形格式不正確" in str(exc_info.value)
+    assert "必須是 Polygon 物件，實際為 NoneType" in str(exc_info.value)
+    
+    # 測試 4: 列表中包含非 Polygon 物件
+    polys_with_invalid_list = [["not a polygon"], isochrones_30[0], isochrones_60[0]]
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df, polys_with_invalid_list)
+    
+    assert "第1層多邊形格式不正確" in str(exc_info.value)
+    assert "列表中的元素必須是 Polygon 物件，實際為 str" in str(exc_info.value)
+    
+    # 測試 5: 空列表
+    polys_with_empty_list = [[], isochrones_30[0], isochrones_60[0]]
+    
+    with pytest.raises(TierError) as exc_info:
+        assign_tier(df, polys_with_empty_list)
+    
+    assert "第1層多邊形格式不正確" in str(exc_info.value)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
