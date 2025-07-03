@@ -67,25 +67,43 @@ def assign_tier(
         
         processed_polygons.append(polygon)
     
-    # 從 lat/lon 建立 Point 幾何
+    # 建立 GeoDataFrame
     geometry = [Point(lon, lat) for lat, lon in zip(df['lat'], df['lon'])]
     gdf = gpd.GeoDataFrame(gdf, geometry=geometry, crs='EPSG:4326')
     
-    # 初始化 tier 欄位為 0（不在任何多邊形內）
+    # 初始化 tier 欄位為 0
     gdf['tier'] = 0
     
-    # 對於每個點，找到它所屬的最高等級（最小多邊形）
-    for idx, point in enumerate(gdf.geometry):
-        highest_tier = 0
+    # 如果是空 DataFrame，直接返回
+    if len(df) == 0:
+        return gdf
+    
+    # 性能優化：對於重複座標，只計算一次
+    # 創建座標到索引的映射
+    coord_key = df['lat'].round(8).astype(str) + ',' + df['lon'].round(8).astype(str)
+    unique_coords = coord_key.drop_duplicates()
+    
+    # 創建唯一座標的 tier 映射
+    coord_to_tier = {}
+    
+    # 只對唯一座標進行 tier 計算
+    for coord in unique_coords:
+        lat_str, lon_str = coord.split(',')
+        lat, lon = float(lat_str), float(lon_str)
+        point = Point(lon, lat)
         
+        highest_tier = 0
         # 檢查每個多邊形，從最高等級到最低等級
         for i, polygon in enumerate(processed_polygons):
             tier_value = len(processed_polygons) - i
             
-            # 直接使用 Polygon 進行包含檢查（最簡潔的方式）
+            # 直接使用 Polygon 進行包含檢查
             if point.within(polygon):
                 highest_tier = max(highest_tier, tier_value)
         
-        gdf.iloc[idx, gdf.columns.get_loc('tier')] = highest_tier
+        coord_to_tier[coord] = highest_tier
+    
+    # 使用預計算的 tier 值
+    gdf['tier'] = coord_key.map(coord_to_tier)
     
     return gdf
