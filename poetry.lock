@@ -338,6 +338,17 @@ files = [
 ]
 
 [[package]]
+name = "jieba"
+version = "0.42.1"
+description = "Chinese Words Segmentation Utilities"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "jieba-0.42.1.tar.gz", hash = "sha256:055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2"},
+]
+
+[[package]]
 name = "kiwisolver"
 version = "1.4.8"
 description = "A fast implementation of the Cassowary constraint solver"
@@ -1064,4 +1075,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13"
-content-hash = "01ac5f2851506569ffec8e91dfbc581c5f7cb8844a67b9882395999bd3518ae0"
+content-hash = "2e3f00ff43854998230895ff21ed1dd81603fa56ae9cb00dd2eb10a7b25a8d15"
