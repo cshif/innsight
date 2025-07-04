@@ -1,55 +1,104 @@
+#!/usr/bin/env python3
+"""
+測試 ORS Client 的完整功能
+包括正常功能、錯誤處理、API 超時、503 錯誤、rate-limit 重試、快取回退等場景
+"""
 import os
 import sys
+import time
 from unittest.mock import Mock, patch
-
 import pytest
+from requests.exceptions import HTTPError, Timeout, ConnectionError
+from json import JSONDecodeError
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-from scripts.ors_client import get_isochrones_by_minutes
+from scripts.ors_client import (
+    get_isochrones_by_minutes, 
+    IsochroneError,
+    _fallback_cache
+)
 from shapely.geometry import Polygon
 
 
-class TestGetIsochronesByMinutes:
-    @patch.dict(os.environ, {'ORS_URL': 'https://api.openrouteservice.org/v2/directions', 'ORS_API_KEY': 'test_key'})
-    @patch('requests.post')
-    def test_get_isochrones_by_minutes_success(self, mock_post):
-        # Arrange
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "features": [
-                {
-                    "type": "Feature",
-                    "properties": {"value": 900},
-                    "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]}
-                },
-                {
-                    "type": "Feature", 
-                    "properties": {"value": 1800},
-                    "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]]}
-                }
-            ]
+# 測試常數
+TEST_COORD = (8.681495, 49.41461)
+TEST_ENV = {'ORS_URL': 'https://api.openrouteservice.org/v2/directions', 'ORS_API_KEY': 'test_key'}
+SAMPLE_GEOJSON = {
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {"value": 900},
+            "geometry": {
+                "type": "Polygon", 
+                "coordinates": [[[8.6, 49.4], [8.7, 49.4], [8.7, 49.5], [8.6, 49.5], [8.6, 49.4]]]
+            }
         }
-        mock_post.return_value = mock_response
+    ]
+}
+SAMPLE_MULTI_GEOJSON = {
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {"value": 900},
+            "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]}
+        },
+        {
+            "type": "Feature", 
+            "properties": {"value": 1800},
+            "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]]}
+        }
+    ]
+}
+
+
+class TestGetIsochronesByMinutes:
+    """測試 get_isochrones_by_minutes 函數的完整功能"""
+    
+    def setup_method(self):
+        """每個測試前清理快取"""
+        _fallback_cache.clear()
+        get_isochrones_by_minutes.cache_clear()
+    
+    def _create_mock_response(self, status_code=200, json_data=None, error_text="", 
+                             raise_error=None):
+        """建立 mock response 的輔助方法"""
+        mock_response = Mock()
+        mock_response.status_code = status_code
+        mock_response.text = error_text
         
-        # Act
-        result = get_isochrones_by_minutes(
-            coord=(8.681495, 49.41461),
-            intervals=[15, 30]
-        )
-        
-        # Assert
+        if json_data is not None:
+            mock_response.json.return_value = json_data
+        if raise_error:
+            mock_response.raise_for_status.side_effect = raise_error
+        else:
+            mock_response.raise_for_status.return_value = None
+            
+        return mock_response
+    
+    def _assert_basic_result_structure(self, result, expected_count=1):
+        """驗證基本結果結構的輔助方法"""
         assert isinstance(result, list)
-        assert len(result) == 2  # 兩個時間間隔
+        assert len(result) == expected_count
         assert all(isinstance(iso_list, list) for iso_list in result)
-        assert all(len(iso_list) == 1 for iso_list in result)  # 每個間隔一個多邊形
+        assert all(len(iso_list) == 1 for iso_list in result)
         assert all(isinstance(iso_list[0], Polygon) for iso_list in result)
+    
+    # === 正常功能測試 ===
+    
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    def test_success_multiple_intervals(self, mock_post):
+        """測試成功取得多個時間間隔的等時圈"""
+        mock_post.return_value = self._create_mock_response(json_data=SAMPLE_MULTI_GEOJSON)
         
+        result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15, 30])
+        
+        self._assert_basic_result_structure(result, expected_count=2)
         mock_post.assert_called_once_with(
             url="https://api.openrouteservice.org/v2/directions/isochrones/driving-car",
             json={
-                "locations": ((8.681495, 49.41461),),
+                "locations": (TEST_COORD,),
                 "range": (900, 1800)  # 15*60, 30*60
             },
             headers={
@@ -60,58 +109,33 @@ class TestGetIsochronesByMinutes:
             timeout=(5, 30)
         )
 
-    @patch.dict(os.environ, {'ORS_URL': 'https://api.openrouteservice.org/v2/directions', 'ORS_API_KEY': 'test_key'})
+    @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    def test_get_isochrones_by_minutes_caching(self, mock_post):
-        # Arrange
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"features": []}
-        mock_post.return_value = mock_response
-        get_isochrones_by_minutes.cache_clear()
+    def test_caching_mechanism(self, mock_post):
+        """測試快取機制"""
+        mock_post.return_value = self._create_mock_response(json_data={"features": []})
         
-        # Act - 兩次相同調用
-        result1 = get_isochrones_by_minutes(
-            coord=(8.681495, 49.41461),
-            intervals=[15]
-        )
+        # 兩次相同調用
+        result1 = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        result2 = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
         
-        result2 = get_isochrones_by_minutes(
-            coord=(8.681495, 49.41461), 
-            intervals=[15]
-        )
-        
-        # Assert
-        assert mock_post.call_count == 1  # 只調用一次API，第二次使用快取
+        assert mock_post.call_count == 1  # 只調用一次API
         assert result1 == result2
-        
-        # 檢查快取資訊 - 快取發生在底層 _fetch_isochrones_from_api 函數上
-        cache_info = get_isochrones_by_minutes.cache_info()
-        assert cache_info['size'] == 1
+        assert get_isochrones_by_minutes.cache_info()['size'] == 1
 
-    @patch.dict(os.environ, {'ORS_URL': 'https://api.openrouteservice.org/v2/directions', 'ORS_API_KEY': 'test_key'})
+    @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    def test_get_isochrones_by_minutes_different_profile(self, mock_post):
-        # Arrange
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"features": []}
-        mock_post.return_value = mock_response
+    def test_different_profile(self, mock_post):
+        """測試不同的交通模式"""
+        mock_post.return_value = self._create_mock_response(json_data={"features": []})
         
-        # Act
         result = get_isochrones_by_minutes(
-            coord=(8.681495, 49.41461),
-            intervals=[10],
-            profile='foot-walking'
+            coord=TEST_COORD, intervals=[10], profile='foot-walking'
         )
         
-        # Assert
         mock_post.assert_called_once_with(
             url="https://api.openrouteservice.org/v2/directions/isochrones/foot-walking",
-            json={
-                "locations": ((8.681495, 49.41461),),
-                "range": (600,)  # 10*60
-            },
+            json={"locations": (TEST_COORD,), "range": (600,)},
             headers={
                 "Accept": "application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8",
                 "Content-Type": "application/json; charset=utf-8",
@@ -119,5 +143,182 @@ class TestGetIsochronesByMinutes:
             },
             timeout=(5, 30)
         )
-        
         assert result == []
+
+    # === HTTP 錯誤處理測試 ===
+    
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    def test_503_service_unavailable_no_cache(self, mock_post):
+        """測試 503 Service Unavailable 且無快取時拋出 IsochroneError"""
+        error = HTTPError("503 Service Unavailable")
+        error.response = Mock(status_code=503)
+        mock_post.return_value = self._create_mock_response(
+            status_code=503, error_text="Service Unavailable", raise_error=error
+        )
+        
+        with pytest.raises(IsochroneError) as exc_info:
+            get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15, 30])
+        
+        assert "no cache available" in str(exc_info.value)
+        assert mock_post.call_count == 3  # 重試 3 次
+
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    def test_429_rate_limit_retry_success(self, mock_post):
+        """測試 429 Rate Limit 重試後成功"""
+        def side_effect(*args, **kwargs):
+            if mock_post.call_count <= 2:
+                error = HTTPError("429 Too Many Requests")
+                error.response = Mock(status_code=429)
+                return self._create_mock_response(
+                    status_code=429, error_text="Too Many Requests", raise_error=error
+                )
+            else:
+                return self._create_mock_response(json_data=SAMPLE_GEOJSON)
+        
+        mock_post.side_effect = side_effect
+        
+        result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        
+        assert mock_post.call_count == 3
+        self._assert_basic_result_structure(result)
+
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    def test_400_bad_request_not_retried(self, mock_post):
+        """測試 400 Bad Request 不會重試"""
+        error = HTTPError("400 Bad Request")
+        error.response = Mock(status_code=400)
+        mock_post.return_value = self._create_mock_response(
+            status_code=400, error_text="Bad Request", raise_error=error
+        )
+        
+        with pytest.raises(IsochroneError):
+            get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        
+        assert mock_post.call_count == 1  # 不重試
+
+    # === 網路連線錯誤測試 ===
+    
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    def test_connection_timeout_retry_success(self, mock_post):
+        """測試連接超時重試後成功"""
+        def side_effect(*args, **kwargs):
+            if mock_post.call_count <= 2:
+                raise Timeout("Connection timeout")
+            else:
+                return self._create_mock_response(json_data=SAMPLE_GEOJSON)
+        
+        mock_post.side_effect = side_effect
+        
+        result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        
+        assert mock_post.call_count == 3
+        self._assert_basic_result_structure(result)
+
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    def test_connection_error_max_retries_exceeded(self, mock_post):
+        """測試連接錯誤超過最大重試次數"""
+        mock_post.side_effect = ConnectionError("Connection failed")
+        
+        with pytest.raises(IsochroneError) as exc_info:
+            get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        
+        assert "no cache available" in str(exc_info.value)
+        assert mock_post.call_count == 3
+
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    def test_json_decode_error_retry_success(self, mock_post):
+        """測試 JSON 解析錯誤重試後成功"""
+        def side_effect(*args, **kwargs):
+            if mock_post.call_count <= 2:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json.side_effect = JSONDecodeError("Invalid JSON", "response", 0)
+                return mock_response
+            else:
+                return self._create_mock_response(json_data=SAMPLE_GEOJSON)
+        
+        mock_post.side_effect = side_effect
+        
+        result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        
+        assert mock_post.call_count == 3
+        self._assert_basic_result_structure(result)
+
+    # === 快取回退測試 ===
+    
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    @patch('scripts.ors_client.logging')
+    def test_cache_fallback_with_warning(self, mock_logging, mock_post):
+        """測試快取回退機制"""
+        # 先建立快取
+        mock_post.return_value = self._create_mock_response(json_data=SAMPLE_GEOJSON)
+        first_result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        assert len(first_result) == 1
+        
+        # 模擬 API 永遠回 503
+        error = HTTPError("503 Service Unavailable")
+        error.response = Mock(status_code=503)
+        mock_post.return_value = self._create_mock_response(
+            status_code=503, error_text="Service Unavailable", raise_error=error
+        )
+        
+        # 手動設置快取為過期狀態
+        cache_key = ('_fetch_isochrones_from_api', ('driving-car', (TEST_COORD,), (900,)), ())
+        if cache_key in _fallback_cache:
+            cached_result, _ = _fallback_cache[cache_key]
+            old_timestamp = time.time() - 25 * 3600  # 25小時前
+            _fallback_cache[cache_key] = (cached_result, old_timestamp)
+        
+        # 再次調用，使用過期快取
+        fallback_result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        
+        assert len(fallback_result) == 1
+        mock_logging.warning.assert_called()
+        
+        # 驗證有快取回退的 warning
+        warning_calls = [str(call) for call in mock_logging.warning.call_args_list]
+        fallback_warnings = [call for call in warning_calls if 'falling back to cached result' in call]
+        assert len(fallback_warnings) > 0
+
+    # === API 錯誤響應測試 ===
+    
+    @patch.dict(os.environ, TEST_ENV)
+    @patch('requests.post')
+    def test_api_error_response_handling(self, mock_post):
+        """測試 API 錯誤響應處理"""
+        error_json = {
+            "error": {
+                "code": 2004,
+                "message": "Request parameters exceed the server configuration limits."
+            }
+        }
+        mock_post.return_value = self._create_mock_response(json_data=error_json)
+        
+        with pytest.raises(RuntimeError) as exc_info:
+            get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+        
+        error_msg = str(exc_info.value)
+        assert "ORS API error 2004" in error_msg
+        assert "Request parameters exceed" in error_msg
+
+    # === 快取管理測試 ===
+    
+    def test_cache_info_and_clear(self):
+        """測試快取資訊和清理功能"""
+        get_isochrones_by_minutes.cache_clear()
+        
+        cache_info = get_isochrones_by_minutes.cache_info()
+        assert isinstance(cache_info, dict)
+        assert 'size' in cache_info
+        assert cache_info['size'] == 0
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
