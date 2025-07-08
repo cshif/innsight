@@ -1,10 +1,11 @@
 import os, time
 from typing import List
 
-from scripts.nominatim_client import NominatimClient, NominatimError
-from scripts.overpass_client import fetch_overpass
-from scripts.ors_client import get_isochrones_by_minutes
-from scripts.tier import assign_tier
+from nominatim_client import NominatimClient, NominatimError
+from overpass_client import fetch_overpass
+from ors_client import get_isochrones_by_minutes
+from tier import assign_tier
+from parser import parse_query, extract_location_from_query
 import pandas as pd
 
 # 可配置的時間間隔（分鐘）
@@ -28,18 +29,73 @@ def get_tier_name(tier: int, intervals: List[int] = None) -> str:
 def main(argv: list[str] | None = None) -> None:  # noqa: D401
     import argparse
 
-    parser = argparse.ArgumentParser(description="Query a Nominatim instance")
-    parser.add_argument("--place", required=True, help="Query string to search for")
+    parser = argparse.ArgumentParser(description="旅宿推薦系統")
+    parser.add_argument("--query", help="請輸入主行程、要去的天數及特殊需求等")
     parser.add_argument(
         "--intervals",
         nargs="+",
         type=int,
         default=DEFAULT_TIME_INTERVALS,
-        help=f"Time intervals in minutes (default: {DEFAULT_TIME_INTERVALS})"
+        help=f"請輸入時間間隔 (單位：分鐘) (default: {DEFAULT_TIME_INTERVALS})"
     )
-    # parser.add_argument("--radius", default=1000)
 
     args = parser.parse_args(argv)
+
+    # 解析中文查詢（如果有的話）
+    parsed_query = None
+    if args.query:
+        parsed_query = parse_query(args.query)
+        print("\n=== 查詢解析結果 ===")
+        
+        if parsed_query.get('days'):
+            print(f"住宿天數: {parsed_query['days']} 天")
+            if parsed_query['days'] >= 7:
+                print("  → 建議尋找長住優惠")
+            elif parsed_query['days'] <= 2:
+                print("  → 短期住宿，可考慮市中心位置")
+        
+        if parsed_query.get('filters'):
+            print(f"篩選需求: {', '.join(parsed_query['filters'])}")
+            filter_descriptions = {
+                'parking': '需要停車位',
+                'wheelchair': '需要無障礙設施',
+                'kids': '親子友善',
+                'pet': '允許寵物'
+            }
+            for f in parsed_query['filters']:
+                if f in filter_descriptions:
+                    print(f"  → {filter_descriptions[f]}")
+        
+        if parsed_query.get('poi'):
+            print(f"興趣點類型: {', '.join(parsed_query['poi'])}")
+            poi_descriptions = {
+                'sightseeing': '觀光景點',
+                'culture': '文化體驗',
+                'historical': '歷史遺跡',
+                'nature': '自然景觀',
+                'food': '美食',
+                'shopping': '購物',
+                'entertainment': '娛樂',
+                'transportation': '交通便利'
+            }
+            for poi in parsed_query['poi']:
+                if poi in poi_descriptions:
+                    print(f"  → {poi_descriptions[poi]}")
+        
+        print("=" * 50)
+
+    # 必須提供查詢參數
+    if not args.query:
+        parser.error("請提供 --query 參數")
+    
+    # 從查詢中提取地點或景點
+    poi = extract_location_from_query(parsed_query, args.query)
+    if not poi:
+        parser.error("無法從查詢中識別地點，請在 --query 中包含地點")
+    
+    print(f"\n=== 從查詢中識別地點 ===")
+    print(f"識別到地點: {poi}")
+    print("=" * 50)
 
     api_endpoint = os.getenv("API_ENDPOINT")
     if not api_endpoint:
@@ -47,9 +103,9 @@ def main(argv: list[str] | None = None) -> None:  # noqa: D401
 
     nominatim_client = NominatimClient(api_endpoint)
     try:
-        data = nominatim_client.geocode(args.place)
+        data = nominatim_client.geocode(poi)
         if not data:
-            parser.error(f"No results found for {args.place}")
+            parser.error(f"No results found for {poi}")
         lat = float(data[0][0])
         lon = float(data[0][1])
         query = f"""
