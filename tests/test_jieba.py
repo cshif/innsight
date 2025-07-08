@@ -47,5 +47,49 @@ def test_jieba_custom_dictionary():
     assert "首里城" in tokens4
 
 
+def test_jieba_multiple_calls_normal_sentences():
+    """測試呼叫多次 jieba.lcut() 處理普通句子時，分詞效果不受自訂詞庫干擾。"""
+    # 載入自訂詞庫
+    dict_path = os.path.join(os.path.dirname(__file__), "..", "resources", "user_dict.txt")
+    jieba.load_userdict(dict_path)
+    
+    # 測試普通句子多次分詞
+    test_sentence = "我想吃拉麵"
+    
+    # 呼叫多次 jieba.lcut()
+    result1 = jieba.lcut(test_sentence)
+    result2 = jieba.lcut(test_sentence)
+    result3 = jieba.lcut(test_sentence)
+    
+    # 驗證結果一致性
+    assert result1 == result2 == result3, "多次呼叫結果應該一致"
+    
+    # 驗證分詞合理性（應該包含基本詞語）
+    expected_tokens = ["我", "想", "吃"]
+    for token in expected_tokens:
+        assert token in result1, f"'{token}' 應該在分詞結果中"
+    
+    # 驗證 "拉麵" 被正確處理（可能分為 "拉" 和 "麵"）
+    assert "拉" in result1 and "麵" in result1, "拉麵應該被合理分詞"
+    
+    # 測試其他普通句子
+    normal_sentences = [
+        "今天天氣很好",
+        "我喜歡看電影",
+        "這個蛋糕很好吃"
+    ]
+    
+    for sentence in normal_sentences:
+        # 每個句子呼叫多次
+        results = [jieba.lcut(sentence) for _ in range(3)]
+        
+        # 驗證結果一致性
+        assert all(r == results[0] for r in results), f"句子 '{sentence}' 多次分詞結果應該一致"
+        
+        # 驗證分詞合理性（詞語長度應該合理，不應有過長詞語）
+        for tokens in results:
+            assert all(len(token) <= 4 for token in tokens), f"句子 '{sentence}' 分詞結果中不應有過長詞語"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
