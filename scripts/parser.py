@@ -10,6 +10,7 @@ This module provides functionality to parse Chinese text queries for:
 
 import re
 import os
+from functools import lru_cache
 from typing import List, Optional, Dict, Set
 
 
@@ -399,29 +400,46 @@ class QueryParser:
             }
 
 
-# Global parser instance
-_parser = QueryParser()
+# Cached parser instance using lru_cache
+@lru_cache(maxsize=1)
+def _get_default_parser() -> QueryParser:
+    """Get the default parser instance, creating it if necessary."""
+    return QueryParser()
 
 
-# Public API functions for backward compatibility
-def extract_days(text: str | None) -> Optional[int]:
+# Cache clearing function for tests
+def clear_parser_cache() -> None:
+    """Clear the parser cache. Useful for testing."""
+    _get_default_parser.cache_clear()
+
+
+# Public API functions with optional dependency injection
+def extract_days(text: str | None, parser: Optional[QueryParser] = None) -> Optional[int]:
     """Extract number of days from Chinese text."""
-    return _parser.days_extractor.extract(text)
+    if parser is None:
+        parser = _get_default_parser()
+    return parser.days_extractor.extract(text)
 
 
-def extract_filters(tokens: List[str] | None) -> List[str]:
+def extract_filters(tokens: List[str] | None, parser: Optional[QueryParser] = None) -> List[str]:
     """Extract filter categories from segmented word tokens."""
-    return _parser.filter_extractor.extract(tokens)
+    if parser is None:
+        parser = _get_default_parser()
+    return parser.filter_extractor.extract(tokens)
 
 
-def extract_poi(tokens: List[str] | None) -> List[str]:
+def extract_poi(tokens: List[str] | None, parser: Optional[QueryParser] = None) -> List[str]:
     """Extract POI categories from segmented word tokens."""
-    return _parser.poi_extractor.extract(tokens)
+    if parser is None:
+        parser = _get_default_parser()
+    return parser.poi_extractor.extract(tokens)
 
 
-def parse_query(text: str) -> Dict[str, any]:
+def parse_query(text: str, parser: Optional[QueryParser] = None) -> Dict[str, any]:
     """Parse query text to extract days, filters, and POI."""
-    return _parser.parse(text)
+    if parser is None:
+        parser = _get_default_parser()
+    return parser.parse(text)
 
 
 def extract_location_from_query(parsed_query: dict, original_query: str) -> str | None:

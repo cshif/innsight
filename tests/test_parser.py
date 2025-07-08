@@ -604,5 +604,281 @@ class TestBackwardCompatibility:
             extract_days("住1天待5晚")
 
 
+class TestParserCaching:
+    """Test the new caching and dependency injection functionality."""
+    
+    def test_lru_cache_functionality(self):
+        """Test that the lru_cache creates and reuses the same parser instance."""
+        from scripts.parser import _get_default_parser
+        
+        # Get parser twice
+        parser1 = _get_default_parser()
+        parser2 = _get_default_parser()
+        
+        # Should be the same instance due to caching
+        assert parser1 is parser2
+        
+        # Verify cache info
+        cache_info = _get_default_parser.cache_info()
+        assert cache_info.hits >= 1
+        assert cache_info.misses == 1
+        assert cache_info.maxsize == 1
+    
+    def test_public_api_uses_same_parser_instance(self):
+        """Test that all public API functions use the same cached parser instance."""
+        from scripts.parser import (
+            _get_default_parser, parse_query, extract_days, 
+            extract_filters, extract_poi, clear_parser_cache
+        )
+        
+        # Clear cache to start fresh
+        clear_parser_cache()
+        
+        # Get the default parser instance
+        default_parser = _get_default_parser()
+        
+        # Mock the parser to track usage
+        original_parse = default_parser.parse
+        original_days_extract = default_parser.days_extractor.extract
+        original_filters_extract = default_parser.filter_extractor.extract
+        original_poi_extract = default_parser.poi_extractor.extract
+        
+        parse_calls = []
+        days_calls = []
+        filters_calls = []
+        poi_calls = []
+        
+        def mock_parse(text):
+            parse_calls.append(text)
+            return original_parse(text)
+        
+        def mock_days_extract(text):
+            days_calls.append(text)
+            return original_days_extract(text)
+        
+        def mock_filters_extract(tokens):
+            filters_calls.append(tokens)
+            return original_filters_extract(tokens)
+        
+        def mock_poi_extract(tokens):
+            poi_calls.append(tokens)
+            return original_poi_extract(tokens)
+        
+        # Replace methods with mocks
+        default_parser.parse = mock_parse
+        default_parser.days_extractor.extract = mock_days_extract
+        default_parser.filter_extractor.extract = mock_filters_extract
+        default_parser.poi_extractor.extract = mock_poi_extract
+        
+        try:
+            # Call public API functions (without parser parameter)
+            parse_query("住兩天")
+            extract_days("住三天")
+            extract_filters(["停車"])
+            extract_poi(["美ら海水族館"])
+            
+            # Verify all functions used the same parser instance
+            assert len(parse_calls) == 1
+            # parse_query() internally calls days_extractor.extract(), so we expect 2 calls
+            assert len(days_calls) == 2  
+            # parse_query() internally calls filter_extractor.extract(), so we expect 2 calls
+            assert len(filters_calls) == 2
+            # parse_query() internally calls poi_extractor.extract(), so we expect 2 calls
+            assert len(poi_calls) == 2
+            
+            # Verify the calls were made through the same instance
+            assert parse_calls[0] == "住兩天"
+            assert "住兩天" in days_calls  # from parse_query()
+            assert "住三天" in days_calls  # from extract_days()
+            assert ["停車"] in filters_calls  # from extract_filters()
+            assert ["美ら海水族館"] in poi_calls  # from extract_poi()
+            
+            # Most importantly, verify they all used the same parser instance
+            # by checking that the mock functions were called on the same object
+            same_parser_used = (
+                default_parser.parse == mock_parse and
+                default_parser.days_extractor.extract == mock_days_extract and
+                default_parser.filter_extractor.extract == mock_filters_extract and
+                default_parser.poi_extractor.extract == mock_poi_extract
+            )
+            assert same_parser_used
+            
+        finally:
+            # Restore original methods
+            default_parser.parse = original_parse
+            default_parser.days_extractor.extract = original_days_extract
+            default_parser.filter_extractor.extract = original_filters_extract
+            default_parser.poi_extractor.extract = original_poi_extract
+    
+    def test_cache_clearing(self):
+        """Test that clear_parser_cache() creates a new parser instance."""
+        from scripts.parser import _get_default_parser, clear_parser_cache
+        
+        # Get initial parser
+        parser1 = _get_default_parser()
+        
+        # Clear cache
+        clear_parser_cache()
+        
+        # Get new parser
+        parser2 = _get_default_parser()
+        
+        # Should be different instances
+        assert parser1 is not parser2
+        
+        # Cache should be reset
+        cache_info = _get_default_parser.cache_info()
+        assert cache_info.misses >= 1
+    
+    def test_dependency_injection(self):
+        """Test that functions accept custom parser instances."""
+        from scripts.parser import (
+            parse_query, extract_days, extract_filters, extract_poi,
+            QueryParser, DaysExtractor, FilterExtractor, PoiExtractor
+        )
+        
+        # Create custom parser with modified behavior
+        custom_parser = QueryParser()
+        
+        # Test parse_query with custom parser
+        result1 = parse_query("住兩天")  # Default parser
+        result2 = parse_query("住兩天", parser=custom_parser)  # Custom parser
+        
+        # Both should work and produce same results
+        assert result1 == result2
+        assert result1['days'] == 2
+        
+        # Test individual functions with custom parser
+        days = extract_days("住三天", parser=custom_parser)
+        filters = extract_filters(["停車", "親子"], parser=custom_parser)
+        poi = extract_poi(["美ら海水族館"], parser=custom_parser)
+        
+        assert days == 3
+        assert "parking" in filters
+        assert "kids" in filters
+        assert "sightseeing" in poi
+    
+    def test_parser_isolation(self):
+        """Test that different parser instances don't interfere with each other."""
+        from scripts.parser import QueryParser, DaysExtractor
+        
+        # Create two independent parsers
+        parser1 = QueryParser()
+        parser2 = QueryParser()
+        
+        # Verify they are different instances
+        assert parser1 is not parser2
+        assert parser1.days_extractor is not parser2.days_extractor
+        
+        # Both should work independently
+        result1 = parser1.parse("住兩天親子")
+        result2 = parser2.parse("住三天停車")
+        
+        assert result1['days'] == 2
+        assert result2['days'] == 3
+        assert "kids" in result1['filters']
+        assert "parking" in result2['filters']
+    
+    def test_mock_compatibility(self):
+        """Test that the new structure is compatible with mocking."""
+        from unittest.mock import Mock
+        from scripts.parser import parse_query, QueryParser
+        
+        # Create a mock parser
+        mock_parser = Mock(spec=QueryParser)
+        mock_parser.parse.return_value = {
+            'days': 99,
+            'filters': ['mock_filter'],
+            'poi': ['mock_poi']
+        }
+        
+        # Use mock parser
+        result = parse_query("any text", parser=mock_parser)
+        
+        # Verify mock was called and returned expected result
+        mock_parser.parse.assert_called_once_with("any text")
+        assert result['days'] == 99
+        assert result['filters'] == ['mock_filter']
+        assert result['poi'] == ['mock_poi']
+    
+    def test_cache_thread_safety(self):
+        """Test that the cache works correctly in multi-threading scenarios."""
+        from scripts.parser import _get_default_parser
+        import threading
+        import time
+        
+        parsers = []
+        
+        def get_parser():
+            # Small delay to increase chance of race conditions
+            time.sleep(0.001)
+            parsers.append(_get_default_parser())
+        
+        # Create multiple threads
+        threads = [threading.Thread(target=get_parser) for _ in range(10)]
+        
+        # Start all threads
+        for thread in threads:
+            thread.start()
+        
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+        
+        # All parsers should be the same instance
+        first_parser = parsers[0]
+        for parser in parsers[1:]:
+            assert parser is first_parser
+
+
+class TestTestabilityImprovements:
+    """Test specific testability improvements."""
+    
+    def setup_method(self):
+        """Setup for each test method."""
+        from scripts.parser import clear_parser_cache
+        clear_parser_cache()
+    
+    def test_isolated_test_runs(self):
+        """Test that tests can run in isolation without affecting each other."""
+        from scripts.parser import parse_query, QueryParser
+        
+        # Test 1: Use default parser
+        result1 = parse_query("住一天")
+        assert result1['days'] == 1
+        
+        # Test 2: Use custom parser (simulates test isolation)
+        custom_parser = QueryParser()
+        result2 = parse_query("住二天", parser=custom_parser)
+        assert result2['days'] == 2
+        
+        # Test 3: Use default parser again
+        result3 = parse_query("住三天")
+        assert result3['days'] == 3
+        
+        # All tests should work independently
+        assert result1['days'] != result2['days']
+        assert result2['days'] != result3['days']
+    
+    def test_cache_reset_between_tests(self):
+        """Test that cache can be reset between tests."""
+        from scripts.parser import _get_default_parser, clear_parser_cache
+        
+        # Get parser
+        parser1 = _get_default_parser()
+        parser1_id = id(parser1)
+        
+        # Clear cache (simulates test teardown)
+        clear_parser_cache()
+        
+        # Get new parser (simulates new test)
+        parser2 = _get_default_parser()
+        parser2_id = id(parser2)
+        
+        # Should be different instances
+        assert parser1_id != parser2_id
+        assert parser1 is not parser2
+
+
 if __name__ == "__main__":
     main([__file__, "-v"])
