@@ -18,7 +18,8 @@ from typing import List
 from scripts.parser import (
     extract_days, extract_filters, extract_poi, parse_query,
     DaysOutOfRangeError, ParseConflictError,
-    DaysExtractor, FilterExtractor, PoiExtractor, ChineseNumberParser
+    DaysExtractor, FilterExtractor, PoiExtractor, ChineseNumberParser,
+    extract_location_from_query
 )
 
 
@@ -230,129 +231,65 @@ class TestFilterExtractor:
 class TestPoiExtractor:
     """Test the POI extraction functionality."""
     
-    def test_sightseeing_keywords(self):
-        """Test sightseeing-related keyword detection."""
+    def test_specific_poi_extraction(self):
+        """Test extraction of specific POI attraction names."""
         extractor = PoiExtractor()
         
-        sightseeing_keywords = ['美ら海水族館', '首里城', '萬座毛', '國際通', 'DFS', '新都心']
-        for keyword in sightseeing_keywords:
+        # Test individual POI attractions
+        poi_keywords = ['美ら海水族館', '首里城', '萬座毛', '國際通', 'DFS', '新都心', 
+                       '琉球村', '今歸仁', '中城城跡', '瀨底島', '那霸機場']
+        
+        for keyword in poi_keywords:
             result = extractor.extract([keyword])
-            assert 'sightseeing' in result
+            assert keyword in result, f"Expected {keyword} in result, got {result}"
     
-    def test_culture_keywords(self):
-        """Test culture-related keyword detection."""
+    def test_multiple_poi_extraction(self):
+        """Test extraction of multiple POI attractions."""
         extractor = PoiExtractor()
         
-        culture_keywords = ['琉球村', '傳統工藝', '琉球文化', '文化體驗', '手作', '陶藝']
-        for keyword in culture_keywords:
-            result = extractor.extract([keyword])
-            assert 'culture' in result
-    
-    def test_historical_keywords(self):
-        """Test historical-related keyword detection."""
-        extractor = PoiExtractor()
-        
-        historical_keywords = ['今歸仁', '遺跡', '古蹟', '城跡', '歷史遺跡', '中城城跡']
-        for keyword in historical_keywords:
-            result = extractor.extract([keyword])
-            assert 'historical' in result
-    
-    def test_nature_keywords(self):
-        """Test nature-related keyword detection."""
-        extractor = PoiExtractor()
-        
-        nature_keywords = ['海灘', '潛水', '海景', '浮潛', '珊瑚', '熱帶魚']
-        for keyword in nature_keywords:
-            result = extractor.extract([keyword])
-            assert 'nature' in result
-    
-    def test_food_keywords(self):
-        """Test food-related keyword detection."""
-        extractor = PoiExtractor()
-        
-        food_keywords = ['沖繩料理', '當地美食', '海葡萄', '沖繩麵', '泡盛']
-        for keyword in food_keywords:
-            result = extractor.extract([keyword])
-            assert 'food' in result
-    
-    def test_shopping_keywords(self):
-        """Test shopping-related keyword detection."""
-        extractor = PoiExtractor()
-        
-        shopping_keywords = ['購物', '逛街', '買東西', '購物中心', 'AEON', '血拚']
-        for keyword in shopping_keywords:
-            result = extractor.extract([keyword])
-            assert 'shopping' in result
-    
-    def test_entertainment_keywords(self):
-        """Test entertainment-related keyword detection."""
-        extractor = PoiExtractor()
-        
-        entertainment_keywords = ['海豚', '表演', '秀', '娛樂', '海豚秀', '動物表演']
-        for keyword in entertainment_keywords:
-            result = extractor.extract([keyword])
-            assert 'entertainment' in result
-    
-    def test_transportation_keywords(self):
-        """Test transportation-related keyword detection."""
-        extractor = PoiExtractor()
-        
-        transportation_keywords = ['租車', '包車', '巴士', '機場', '那霸機場', '交通']
-        for keyword in transportation_keywords:
-            result = extractor.extract([keyword])
-            assert 'transportation' in result
-    
-    def test_pattern_matching(self):
-        """Test regex pattern matching for POI categories."""
-        extractor = PoiExtractor()
-        
-        # Test sightseeing patterns
-        result = extractor.extract(['去', '看', '風景'])
-        assert 'sightseeing' in result
-        
-        result = extractor.extract(['參觀', '博物館'])
-        assert 'sightseeing' in result
-        
-        # Test food patterns
-        result = extractor.extract(['吃', '當地', '特色'])
-        assert 'food' in result
-        
-        # Test nature patterns
-        result = extractor.extract(['玩', '水', '活動'])
-        assert 'nature' in result
-    
-    def test_multiple_categories(self):
-        """Test extraction of multiple POI categories."""
-        extractor = PoiExtractor()
-        
-        result = extractor.extract(['美ら海水族館', '吃', '沖繩料理'])
-        assert 'sightseeing' in result
-        assert 'nature' in result  # 美ら海水族館 matches both
-        assert 'food' in result
+        # Test multiple POIs in one query
+        result = extractor.extract(['美ら海水族館', '首里城', '萬座毛'])
+        assert '美ら海水族館' in result
+        assert '首里城' in result
+        assert '萬座毛' in result
         assert len(result) == 3
         
-        result = extractor.extract(['購物', '看', '海豚', '表演'])
-        assert 'shopping' in result
-        assert 'entertainment' in result
-        assert 'nature' in result
+        # Test mixed POIs
+        result = extractor.extract(['去', '國際通', '和', 'DFS', '購物'])
+        assert '國際通' in result
+        assert 'DFS' in result
+        assert len(result) == 2
     
     def test_no_duplicates(self):
         """Test that results contain no duplicates."""
         extractor = PoiExtractor()
         
-        result = extractor.extract(['美ら海水族館', '海景', '海灘'])
-        # All should match 'nature' and 'sightseeing' categories
-        assert 'nature' in result
-        assert 'sightseeing' in result
-        # Should not have duplicates
-        assert len([x for x in result if x == 'nature']) == 1
-        assert len([x for x in result if x == 'sightseeing']) == 1
+        # Test same POI mentioned multiple times
+        result = extractor.extract(['美ら海水族館', '美ら海水族館'])
+        assert len(result) == 1
+        assert '美ら海水族館' in result
+    
+    def test_partial_matches(self):
+        """Test that partial matches work correctly."""
+        extractor = PoiExtractor()
+        
+        # Test when jieba might split compound words
+        result = extractor.extract(['美ら海', '水族館'])
+        assert '美ら海水族館' in result
+        
+        # Test when POI name appears in larger context
+        result = extractor.extract(['想去', '首里城', '參觀'])
+        assert '首里城' in result
     
     def test_no_matches(self):
         """Test when no POI keywords are found."""
         extractor = PoiExtractor()
         
         result = extractor.extract(['隨機', '文字', '測試'])
+        assert result == []
+        
+        # Test common words that aren't POIs
+        result = extractor.extract(['購物', '吃飯', '住宿'])
         assert result == []
     
     def test_edge_cases(self):
@@ -364,6 +301,62 @@ class TestPoiExtractor:
         assert extractor.extract([None]) == []
         assert extractor.extract([123]) == []
         assert extractor.extract(['random', 'strings']) == []
+
+
+class TestLocationExtractor:
+    """Test the location extraction functionality."""
+    
+    def test_location_extraction_only_cities(self):
+        """Test that only cities/regions are extracted, not attractions."""
+        location_tests = [
+            ('沖繩三天兩夜', '沖繩'),
+            ('台北自由行', '台北'),
+            ('東京迪士尼樂園', '東京'),
+            ('大阪環球影城', '大阪'),
+            ('京都古蹟巡禮', '京都'),
+            ('那霸市區住宿', '沖繩'),  # 那霸 maps to 沖繩
+            ('Okinawa travel', '沖繩')
+        ]
+        
+        for query, expected_place in location_tests:
+            parsed_query = {'poi': []}
+            result = extract_location_from_query(parsed_query, query)
+            assert result == expected_place, f"Expected {expected_place}, got {result} for query: {query}"
+    
+    def test_location_with_attractions(self):
+        """Test that location is extracted even when attractions are present."""
+        # When both location and attractions are present, should return only location
+        query = "沖繩美ら海水族館一日遊"
+        parsed_query = {'poi': ['美ら海水族館']}
+        result = extract_location_from_query(parsed_query, query)
+        # Should return location, not attraction
+        assert result == '沖繩'
+    
+    def test_no_location_found(self):
+        """Test when no location can be extracted."""
+        queries = [
+            "住三天兩夜",
+            "親子友善飯店",
+            "要有停車場",
+            "隨機文字測試",
+            "去首里城參觀",  # Only attraction, no location
+            "萬座毛看夕陽"   # Only attraction, no location
+        ]
+        
+        for query in queries:
+            parsed_query = {'poi': []}
+            result = extract_location_from_query(parsed_query, query)
+            assert result is None, f"Expected None for query: {query}, got {result}"
+    
+    def test_edge_cases(self):
+        """Test edge cases for location extraction."""
+        # Test with None/empty inputs
+        assert extract_location_from_query(None, "沖繩") == "沖繩"  # Still checks original query
+        assert extract_location_from_query({}, "沖繩") == "沖繩"
+        assert extract_location_from_query({'poi': []}, "") is None
+        
+        # Test with malformed parsed_query
+        assert extract_location_from_query({'invalid': 'data'}, "台北") == "台北"
 
 
 class TestApiOutputFormat:
@@ -447,17 +440,18 @@ class TestIntegration:
         assert 'days' in result
         assert 'filters' in result
         assert 'poi' in result
+        assert 'place' in result
         assert isinstance(result['filters'], list)
         assert isinstance(result['poi'], list)
+        assert isinstance(result['place'], (str, type(None)))
     
     def test_parse_query_with_poi(self):
         """Test parse_query with POI extraction."""
         result = parse_query("想去美ら海水族館看海豚")
         assert result['days'] is None
         assert result['filters'] == []
-        assert 'sightseeing' in result['poi']
-        assert 'nature' in result['poi']
-        assert 'entertainment' in result['poi']
+        assert '美ら海水族館' in result['poi']
+        assert result['place'] is None
     
     def test_parse_query_comprehensive(self):
         """Test parse_query with days, filters, and POI."""
@@ -465,7 +459,30 @@ class TestIntegration:
         assert result['days'] == 2
         assert 'parking' in result['filters']
         assert 'kids' in result['filters']
-        assert 'sightseeing' in result['poi']
+        assert '首里城' in result['poi']
+        assert result['place'] is None
+    
+    def test_parse_query_with_place_extraction(self):
+        """Test parse_query with place extraction."""
+        # Test location with specific attractions
+        result = parse_query("沖繩美ら海水族館一日遊")
+        assert result['days'] == 1
+        assert result['place'] == '沖繩'  # Location is 沖繩
+        assert '美ら海水族館' in result['poi']  # POI is specific attraction
+        
+        # Test general locations
+        result = parse_query("台北三天兩夜親子旅遊")
+        assert result['days'] == 3
+        assert result['place'] == '台北'
+        assert 'kids' in result['filters']
+        assert result['poi'] == []  # No specific attractions mentioned
+        
+        # Test no place found
+        result = parse_query("住兩天要停車場")
+        assert result['days'] == 2
+        assert result['place'] is None
+        assert 'parking' in result['filters']
+        assert result['poi'] == []
 
 
 class TestErrorHandling:
@@ -756,7 +773,7 @@ class TestParserCaching:
         assert days == 3
         assert "parking" in filters
         assert "kids" in filters
-        assert "sightseeing" in poi
+        assert "美ら海水族館" in poi
     
     def test_parser_isolation(self):
         """Test that different parser instances don't interfere with each other."""

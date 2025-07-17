@@ -215,60 +215,27 @@ class FilterExtractor:
 
 
 class PoiExtractor:
-    """Extractor for main travel POI (Point of Interest) activities and attractions."""
+    """Extractor for specific POI (Point of Interest) attractions."""
     
-    POI_MAPPINGS = {
-        'sightseeing': {
-            'keywords': ['美ら海水族館', '首里城', '萬座毛', '國際通', '殘波岬', '古宇利島', 
-                        '部瀨名海中公園', '琉球玻璃村', 'DFS', '美國村', '新都心'],
-            'patterns': [r'去.*看.*', r'參觀.*', r'逛.*', r'看.*景']
-        },
-        'culture': {
-            'keywords': ['琉球村', '傳統工藝', '琉球文化', '民俗村', '文化村', '傳統', '工藝', 
-                        '歷史', '博物館', '文化體驗', '手作', '陶藝'],
-            'patterns': [r'體驗.*文化', r'學.*傳統', r'.*工藝.*', r'文化.*']
-        },
-        'historical': {
-            'keywords': ['今歸仁', '遺跡', '古蹟', '城跡', '史跡', '古城', '歷史遺跡',
-                        '中城城跡', '勝連城跡', '座喜味城跡'],
-            'patterns': [r'.*遺跡.*', r'.*古蹟.*', r'.*城跡.*', r'歷史.*']
-        },
-        'nature': {
-            'keywords': ['海灘', '潛水', '海景', '海', '海水', '海邊', '沙灘', '浮潛', 
-                        '海中', '海底', '珊瑚', '熱帶魚', '瀨底島', '水納島'],
-            'patterns': [r'.*海.*玩', r'.*潛水.*', r'看.*海', r'玩.*水', r'.*海景.*']
-        },
-        'food': {
-            'keywords': ['沖繩料理', '當地美食', '海葡萄', '苦瓜', '紅芋', '沖繩麵', 
-                        '三線魚', '豬腳', '泡盛', 'A&W', '藍封', 'Blue Seal'],
-            'patterns': [r'吃.*', r'嘗.*', r'品.*', r'美食.*', r'料理.*']
-        },
-        'shopping': {
-            'keywords': ['購物', '逛街', '買東西', '購物中心', '商場', '免稅店', 'DFS', 
-                        '新都心', 'AEON', '永旺', '購買', '血拚'],
-            'patterns': [r'.*購物.*', r'.*逛街.*', r'買.*', r'購買.*']
-        },
-        'entertainment': {
-            'keywords': ['海豚', '表演', '秀', '娛樂', '遊樂園', '主題樂園', '水族館表演',
-                        '海豚秀', '鯨鯊', '動物表演', '音樂', '舞蹈'],
-            'patterns': [r'看.*表演', r'.*秀.*', r'.*娛樂.*', r'玩.*']
-        },
-        'transportation': {
-            'keywords': ['租車', '包車', '巴士', '電車', '單軌', '計程車', '交通',
-                        '機場', '那霸機場', '港口', '輪船'],
-            'patterns': [r'.*租車.*', r'.*包車.*', r'交通.*', r'.*機場.*']
-        }
-    }
+    # 具體景點名稱列表
+    POI_KEYWORDS = [
+        # 沖繩景點
+        '美ら海水族館', '首里城', '萬座毛', '國際通', '殘波岬', '古宇利島',
+        '部瀨名海中公園', '琉球玻璃村', 'DFS', '美國村', '新都心',
+        '琉球村', '今歸仁', '中城城跡', '勝連城跡', '座喜味城跡',
+        '瀨底島', '水納島', '那霸機場',
+        # 可以在此添加其他城市的景點
+    ]
     
     def extract(self, tokens: List[str] | None) -> List[str]:
         """
-        Extract POI categories from segmented word tokens.
+        Extract specific POI names from segmented word tokens.
         
         Args:
             tokens: List of segmented words
             
         Returns:
-            List[str]: List of POI categories (no duplicates, order not guaranteed)
+            List[str]: List of specific POI names (no duplicates, order not guaranteed)
         """
         if not tokens or not isinstance(tokens, list):
             return []
@@ -276,10 +243,10 @@ class PoiExtractor:
         # Combine tokens to catch split keywords
         text_combined = self._combine_tokens(tokens)
         
-        # Find matching POI categories
-        found_categories = self._find_matching_categories(tokens, text_combined)
+        # Find matching POI attractions
+        found_pois = self._find_matching_pois(tokens, text_combined)
         
-        return list(found_categories)
+        return list(found_pois)
     
     def _combine_tokens(self, tokens: List[str]) -> str:
         """Safely combine tokens into a single string."""
@@ -288,31 +255,22 @@ class PoiExtractor:
         except (TypeError, AttributeError):
             return ''
     
-    def _find_matching_categories(self, tokens: List[str], combined_text: str) -> Set[str]:
-        """Find all matching POI categories."""
-        found_categories = set()
+    def _find_matching_pois(self, tokens: List[str], combined_text: str) -> Set[str]:
+        """Find all matching POI attractions."""
+        found_pois = set()
         
-        for category, config in self.POI_MAPPINGS.items():
-            if self._has_matching_category(config, tokens, combined_text):
-                found_categories.add(category)
+        for poi_name in self.POI_KEYWORDS:
+            if self._has_matching_poi(poi_name, tokens, combined_text):
+                found_pois.add(poi_name)
         
-        return found_categories
+        return found_pois
     
-    def _has_matching_category(self, config: Dict, tokens: List[str], combined_text: str) -> bool:
-        """Check if any keyword or pattern matches for a category."""
-        # Check keywords
-        for keyword in config['keywords']:
-            if (keyword in combined_text or 
-                any(keyword in str(token) for token in tokens 
-                    if token is not None and isinstance(token, (str, int)))):
-                return True
-        
-        # Check patterns
-        for pattern in config['patterns']:
-            if re.search(pattern, combined_text):
-                return True
-                
-        return False
+    def _has_matching_poi(self, poi_name: str, tokens: List[str], combined_text: str) -> bool:
+        """Check if a POI name matches in tokens or combined text."""
+        # Check in combined text or individual tokens
+        return (poi_name in combined_text or 
+                any(poi_name in str(token) for token in tokens 
+                    if token is not None and isinstance(token, (str, int))))
 
 
 class JiebaTokenizer:
@@ -364,13 +322,13 @@ class QueryParser:
     
     def parse(self, text: str) -> Dict[str, any]:
         """
-        Parse query text to extract days, filters, and POI.
+        Parse query text to extract days, filters, POI, and place.
         
         Args:
             text: Input query text
             
         Returns:
-            dict: Dictionary containing 'days', 'filters', and 'poi' keys
+            dict: Dictionary containing 'days', 'filters', 'poi', and 'place' keys
         """
         try:
             # Tokenize text
@@ -381,10 +339,21 @@ class QueryParser:
             filters = self.filter_extractor.extract(tokens)
             poi = self.poi_extractor.extract(tokens)
             
-            return {
+            # Create temporary parsed result for location extraction
+            parsed_result = {
                 'days': days,
                 'filters': filters,
                 'poi': poi
+            }
+            
+            # Extract place/location
+            place = extract_location_from_query(parsed_result, text)
+            
+            return {
+                'days': days,
+                'filters': filters,
+                'poi': poi,
+                'place': place
             }
             
         except Exception:
@@ -393,10 +362,21 @@ class QueryParser:
             filters = self.filter_extractor.extract([text])
             poi = self.poi_extractor.extract([text])
             
-            return {
+            # Create temporary parsed result for location extraction
+            parsed_result = {
                 'days': days,
                 'filters': filters,
                 'poi': poi
+            }
+            
+            # Extract place/location
+            place = extract_location_from_query(parsed_result, text)
+            
+            return {
+                'days': days,
+                'filters': filters,
+                'poi': poi,
+                'place': place
             }
 
 
@@ -443,34 +423,20 @@ def parse_query(text: str, parser: Optional[QueryParser] = None) -> Dict[str, an
 
 
 def extract_location_from_query(parsed_query: dict, original_query: str) -> str | None:
-    """從解析結果和原始查詢中提取具體地點或景點信息"""
+    """從解析結果和原始查詢中提取地點信息（城市/地區）"""
     
-    # 優先檢查 POI 中是否有特定地點
-    if parsed_query and parsed_query.get('poi'):
-        # 沖繩相關地點關鍵詞
-        okinawa_keywords = [
-            '美ら海水族館', '首里城', '萬座毛', '國際通', '殘波岬', '古宇利島',
-            '部瀨名海中公園', '琉球玻璃村', 'DFS', '美國村', '新都心',
-            '琉球村', '今歸仁', '中城城跡', '勝連城跡', '座喜味城跡',
-            '瀨底島', '水納島', '那霸機場'
-        ]
-        
-        # 優先返回具體的景點名稱
-        for keyword in okinawa_keywords:
-            if keyword in original_query:
-                return keyword
-    
-    # 直接檢查原始查詢中的地點
+    # 地點關鍵詞 - 只包含城市/地區，不包含景點
     location_keywords = {
         '沖繩': '沖繩',
         '台北': '台北',
         '東京': '東京',
         '大阪': '大阪',
         '京都': '京都',
-        '那霸': '沖繩',
+        '那霸': '沖繩',  # 那霸屬於沖繩
         'Okinawa': '沖繩'
     }
     
+    # 檢查原始查詢中的地點
     for keyword, location in location_keywords.items():
         if keyword in original_query:
             return location
