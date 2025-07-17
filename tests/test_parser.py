@@ -17,7 +17,7 @@ from typing import List
 
 from scripts.parser import (
     extract_days, extract_filters, extract_poi, parse_query,
-    DaysOutOfRangeError, ParseConflictError,
+    DaysOutOfRangeError, ParseConflictError, ParseError,
     DaysExtractor, FilterExtractor, PoiExtractor, ChineseNumberParser,
     extract_location_from_query
 )
@@ -410,32 +410,34 @@ class TestIntegration:
     
     def test_parse_query_with_days_and_filters(self):
         """Test parse_query with both days and filters."""
-        result = parse_query("想住兩天一夜，要好停車的親子友善飯店")
+        result = parse_query("想住兩天一夜，要好停車的親子友善飯店去沖繩")
         assert result['days'] == 2
         assert 'parking' in result['filters']
         assert 'kids' in result['filters']
+        assert result['place'] == '沖繩'
     
     def test_parse_query_days_only(self):
         """Test parse_query with only days."""
-        result = parse_query("預計待3天")
-        assert result['days'] == 3
-        assert result['filters'] == []
+        # This should now fail with ParseError since no place or poi
+        with raises(ParseError):
+            parse_query("預計待3天")
     
     def test_parse_query_filters_only(self):
         """Test parse_query with only filters."""
-        result = parse_query("要無障礙設施")
-        assert result['days'] is None
-        assert 'wheelchair' in result['filters']
+        # This should now fail with ParseError since no place or poi
+        with raises(ParseError):
+            parse_query("要無障礙設施")
     
     def test_parse_query_no_matches(self):
         """Test parse_query with no matches."""
-        result = parse_query("隨機文字")
-        assert result['days'] is None
-        assert result['filters'] == []
+        # This should now fail with ParseError since no place or poi
+        with raises(ParseError):
+            parse_query("隨機文字")
     
     def test_parse_query_return_format(self):
         """Test that parse_query returns correct dictionary format."""
-        result = parse_query("住2天")
+        # Use a query that has place to avoid ParseError
+        result = parse_query("沖繩住2天")
         assert isinstance(result, dict)
         assert 'days' in result
         assert 'filters' in result
@@ -477,12 +479,9 @@ class TestIntegration:
         assert 'kids' in result['filters']
         assert result['poi'] == []  # No specific attractions mentioned
         
-        # Test no place found
-        result = parse_query("住兩天要停車場")
-        assert result['days'] == 2
-        assert result['place'] is None
-        assert 'parking' in result['filters']
-        assert result['poi'] == []
+        # Test no place found - this should now fail with ParseError
+        with raises(ParseError):
+            parse_query("住兩天要停車場")
 
 
 class TestErrorHandling:
@@ -516,6 +515,93 @@ class TestErrorHandling:
                 assert isinstance(result, list)
             except Exception as e:
                 fail(f"Unexpected exception for input '{test_input}': {e}")
+
+
+class TestParseValidation:
+    """Test parse validation logic for place and poi requirements."""
+    
+    def test_parse_error_no_place_no_poi(self):
+        """Test that ParseError is raised when both place and poi are missing."""
+        queries_should_fail = [
+            "想住兩天",
+            "要親子友善的飯店", 
+            "需要停車場",
+            "住三天要無障礙設施",
+            "親子同行，要寵物友善",
+            "預計待一週",
+            "找有輪椅通道的住宿",
+            "隨機文字"
+        ]
+        
+        for query in queries_should_fail:
+            with raises(ParseError) as exc_info:
+                parse_query(query)
+            assert str(exc_info.value) == "無法判斷地名或主行程"
+    
+    def test_parse_success_with_place_only(self):
+        """Test that parsing succeeds when place is found but no poi."""
+        queries_should_succeed = [
+            ("沖繩三天兩夜", "沖繩", []),
+            ("台北自由行", "台北", []),
+            ("東京迪士尼樂園", "東京", []),
+            ("大阪環球影城", "大阪", []),
+            ("京都古蹟巡禮", "京都", []),
+            ("那霸市區住宿", "沖繩", []),
+            ("Okinawa travel", "沖繩", [])
+        ]
+        
+        for query, expected_place, expected_poi in queries_should_succeed:
+            result = parse_query(query)
+            assert result['place'] == expected_place
+            assert result['poi'] == expected_poi
+    
+    def test_parse_success_with_poi_only(self):
+        """Test that parsing succeeds when poi is found but no place."""
+        queries_should_succeed = [
+            ("去首里城參觀", None, ["首里城"]),
+            ("美ら海水族館看海豚", None, ["美ら海水族館"]),
+            ("想去萬座毛看夕陽", None, ["萬座毛"]),
+            ("國際通購物", None, ["國際通"]),
+            ("今歸仁城遺跡", None, ["今歸仁"])
+        ]
+        
+        for query, expected_place, expected_poi in queries_should_succeed:
+            result = parse_query(query)
+            assert result['place'] == expected_place
+            assert result['poi'] == expected_poi
+    
+    def test_parse_success_with_both_place_and_poi(self):
+        """Test that parsing succeeds when both place and poi are found."""
+        queries_should_succeed = [
+            ("沖繩美ら海水族館一日遊", "沖繩", ["美ら海水族館"]),
+            ("台北想去首里城", "台北", ["首里城"]),
+            ("東京行程包含萬座毛", "東京", ["萬座毛"])
+        ]
+        
+        for query, expected_place, expected_poi in queries_should_succeed:
+            result = parse_query(query)
+            assert result['place'] == expected_place
+            assert result['poi'] == expected_poi
+    
+    def test_specific_validation_requirement(self):
+        """Test the specific requirement from user: 想住兩天 should raise ParseError."""
+        with raises(ParseError) as exc_info:
+            parse_query("想住兩天")
+        assert str(exc_info.value) == "無法判斷地名或主行程"
+    
+    def test_complex_queries_with_filters_still_fail_without_place_poi(self):
+        """Test that complex queries with filters still fail without place or poi."""
+        complex_queries = [
+            "想住兩天一夜，要好停車的親子友善飯店",
+            "預計待三天，要無障礙房間，可以帶寵物嗎？",
+            "四日三夜家族旅行，車子要好停車",
+            "住一晚就好，有沒有適合輪椅的房間"
+        ]
+        
+        for query in complex_queries:
+            with raises(ParseError) as exc_info:
+                parse_query(query)
+            assert str(exc_info.value) == "無法判斷地名或主行程"
 
 
 class TestPerformance:
@@ -579,10 +665,10 @@ class TestEdgeCases:
     def test_complex_queries(self):
         """Test complex real-world query patterns."""
         queries = [
-            "我想住兩天一夜，需要有停車場和親子設施的飯店",
-            "預計待三天，要無障礙房間，可以帶寵物嗎？",
-            "四日三夜家族旅行，車子要好停車",
-            "住一晚就好，有沒有適合輪椅的房間"
+            "我想住兩天一夜，需要有停車場和親子設施的飯店去沖繩",
+            "預計待三天去台北，要無障礙房間，可以帶寵物嗎？",
+            "四日三夜家族旅行去東京，車子要好停車",
+            "住一晚就好去大阪，有沒有適合輪椅的房間"
         ]
         
         for query in queries:
@@ -608,9 +694,10 @@ class TestBackwardCompatibility:
         assert extract_filters([]) == []
         
         # Test parse_query
-        result = parse_query("住2天要停車")
+        result = parse_query("住2天要停車去沖繩")
         assert result['days'] == 2
         assert 'parking' in result['filters']
+        assert result['place'] == '沖繩'
     
     def test_exception_classes(self):
         """Test that custom exception classes are still available."""
@@ -689,7 +776,7 @@ class TestParserCaching:
         
         try:
             # Call public API functions (without parser parameter)
-            parse_query("住兩天")
+            parse_query("住兩天去沖繩")
             extract_days("住三天")
             extract_filters(["停車"])
             extract_poi(["美ら海水族館"])
@@ -704,8 +791,8 @@ class TestParserCaching:
             assert len(poi_calls) == 2
             
             # Verify the calls were made through the same instance
-            assert parse_calls[0] == "住兩天"
-            assert "住兩天" in days_calls  # from parse_query()
+            assert parse_calls[0] == "住兩天去沖繩"
+            assert "住兩天去沖繩" in days_calls  # from parse_query()
             assert "住三天" in days_calls  # from extract_days()
             assert ["停車"] in filters_calls  # from extract_filters()
             assert ["美ら海水族館"] in poi_calls  # from extract_poi()
@@ -758,12 +845,13 @@ class TestParserCaching:
         custom_parser = QueryParser()
         
         # Test parse_query with custom parser
-        result1 = parse_query("住兩天")  # Default parser
-        result2 = parse_query("住兩天", parser=custom_parser)  # Custom parser
+        result1 = parse_query("住兩天去沖繩")  # Default parser
+        result2 = parse_query("住兩天去沖繩", parser=custom_parser)  # Custom parser
         
         # Both should work and produce same results
         assert result1 == result2
         assert result1['days'] == 2
+        assert result1['place'] == '沖繩'
         
         # Test individual functions with custom parser
         days = extract_days("住三天", parser=custom_parser)
@@ -788,13 +876,15 @@ class TestParserCaching:
         assert parser1.days_extractor is not parser2.days_extractor
         
         # Both should work independently
-        result1 = parser1.parse("住兩天親子")
-        result2 = parser2.parse("住三天停車")
+        result1 = parser1.parse("住兩天親子去沖繩")
+        result2 = parser2.parse("住三天停車去台北")
         
         assert result1['days'] == 2
         assert result2['days'] == 3
         assert "kids" in result1['filters']
         assert "parking" in result2['filters']
+        assert result1['place'] == '沖繩'
+        assert result2['place'] == '台北'
     
     def test_mock_compatibility(self):
         """Test that the new structure is compatible with mocking."""
@@ -861,17 +951,20 @@ class TestTestabilityImprovements:
         from scripts.parser import parse_query, QueryParser
         
         # Test 1: Use default parser
-        result1 = parse_query("住一天")
+        result1 = parse_query("住一天去沖繩")
         assert result1['days'] == 1
+        assert result1['place'] == '沖繩'
         
         # Test 2: Use custom parser (simulates test isolation)
         custom_parser = QueryParser()
-        result2 = parse_query("住二天", parser=custom_parser)
+        result2 = parse_query("住二天去台北", parser=custom_parser)
         assert result2['days'] == 2
+        assert result2['place'] == '台北'
         
         # Test 3: Use default parser again
-        result3 = parse_query("住三天")
+        result3 = parse_query("住三天去東京")
         assert result3['days'] == 3
+        assert result3['place'] == '東京'
         
         # All tests should work independently
         assert result1['days'] != result2['days']

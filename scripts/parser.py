@@ -24,6 +24,11 @@ class ParseConflictError(Exception):
     pass
 
 
+class ParseError(Exception):
+    """Exception raised when parsing fails due to missing required information."""
+    pass
+
+
 class ChineseNumberParser:
     """Helper class for parsing Chinese numbers."""
     
@@ -349,6 +354,10 @@ class QueryParser:
             # Extract place/location
             place = extract_location_from_query(parsed_result, text)
             
+            # Validate that at least one of place or poi is present
+            if place is None and not poi:
+                raise ParseError("無法判斷地名或主行程")
+            
             return {
                 'days': days,
                 'filters': filters,
@@ -356,6 +365,9 @@ class QueryParser:
                 'place': place
             }
             
+        except ParseError:
+            # Re-raise ParseError to preserve the validation message
+            raise
         except Exception:
             # Fallback: minimal parsing
             days = self.days_extractor.extract(text)
@@ -371,6 +383,10 @@ class QueryParser:
             
             # Extract place/location
             place = extract_location_from_query(parsed_result, text)
+            
+            # Validate that at least one of place or poi is present
+            if place is None and not poi:
+                raise ParseError("無法判斷地名或主行程")
             
             return {
                 'days': days,
