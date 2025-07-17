@@ -354,15 +354,21 @@ class QueryParser:
             # Extract place/location
             place = extract_location_from_query(parsed_result, text)
             
+            # Convert poi list to single string (first poi or empty string)
+            poi_str = poi[0] if poi else ""
+            
             # Validate that at least one of place or poi is present
             if place is None and not poi:
                 raise ParseError("無法判斷地名或主行程")
             
+            # Ensure place is always a string (use empty string if None)
+            place_str = place if place is not None else ""
+            
             return {
                 'days': days,
                 'filters': filters,
-                'poi': poi,
-                'place': place
+                'poi': poi_str,
+                'place': place_str
             }
             
         except ParseError:
@@ -384,15 +390,21 @@ class QueryParser:
             # Extract place/location
             place = extract_location_from_query(parsed_result, text)
             
+            # Convert poi list to single string (first poi or empty string)
+            poi_str = poi[0] if poi else ""
+            
             # Validate that at least one of place or poi is present
             if place is None and not poi:
                 raise ParseError("無法判斷地名或主行程")
             
+            # Ensure place is always a string (use empty string if None)
+            place_str = place if place is not None else ""
+            
             return {
                 'days': days,
                 'filters': filters,
-                'poi': poi,
-                'place': place
+                'poi': poi_str,
+                'place': place_str
             }
 
 

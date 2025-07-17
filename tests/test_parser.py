@@ -444,7 +444,7 @@ class TestIntegration:
         assert 'poi' in result
         assert 'place' in result
         assert isinstance(result['filters'], list)
-        assert isinstance(result['poi'], list)
+        assert isinstance(result['poi'], str)
         assert isinstance(result['place'], (str, type(None)))
     
     def test_parse_query_with_poi(self):
@@ -453,7 +453,7 @@ class TestIntegration:
         assert result['days'] is None
         assert result['filters'] == []
         assert '美ら海水族館' in result['poi']
-        assert result['place'] is None
+        assert result['place'] is ""
     
     def test_parse_query_comprehensive(self):
         """Test parse_query with days, filters, and POI."""
@@ -462,7 +462,7 @@ class TestIntegration:
         assert 'parking' in result['filters']
         assert 'kids' in result['filters']
         assert '首里城' in result['poi']
-        assert result['place'] is None
+        assert result['place'] is ""
     
     def test_parse_query_with_place_extraction(self):
         """Test parse_query with place extraction."""
@@ -477,7 +477,7 @@ class TestIntegration:
         assert result['days'] == 3
         assert result['place'] == '台北'
         assert 'kids' in result['filters']
-        assert result['poi'] == []  # No specific attractions mentioned
+        assert result['poi'] == ""  # No specific attractions mentioned
         
         # Test no place found - this should now fail with ParseError
         with raises(ParseError):
@@ -541,13 +541,13 @@ class TestParseValidation:
     def test_parse_success_with_place_only(self):
         """Test that parsing succeeds when place is found but no poi."""
         queries_should_succeed = [
-            ("沖繩三天兩夜", "沖繩", []),
-            ("台北自由行", "台北", []),
-            ("東京迪士尼樂園", "東京", []),
-            ("大阪環球影城", "大阪", []),
-            ("京都古蹟巡禮", "京都", []),
-            ("那霸市區住宿", "沖繩", []),
-            ("Okinawa travel", "沖繩", [])
+            ("沖繩三天兩夜", "沖繩", ""),
+            ("台北自由行", "台北", ""),
+            ("東京迪士尼樂園", "東京", ""),
+            ("大阪環球影城", "大阪", ""),
+            ("京都古蹟巡禮", "京都", ""),
+            ("那霸市區住宿", "沖繩", ""),
+            ("Okinawa travel", "沖繩", "")
         ]
         
         for query, expected_place, expected_poi in queries_should_succeed:
@@ -558,11 +558,11 @@ class TestParseValidation:
     def test_parse_success_with_poi_only(self):
         """Test that parsing succeeds when poi is found but no place."""
         queries_should_succeed = [
-            ("去首里城參觀", None, ["首里城"]),
-            ("美ら海水族館看海豚", None, ["美ら海水族館"]),
-            ("想去萬座毛看夕陽", None, ["萬座毛"]),
-            ("國際通購物", None, ["國際通"]),
-            ("今歸仁城遺跡", None, ["今歸仁"])
+            ("去首里城參觀", "", "首里城"),
+            ("美ら海水族館看海豚", "", "美ら海水族館"),
+            ("想去萬座毛看夕陽", "", "萬座毛"),
+            ("國際通購物", "", "國際通"),
+            ("今歸仁城遺跡", "", "今歸仁")
         ]
         
         for query, expected_place, expected_poi in queries_should_succeed:
@@ -573,9 +573,9 @@ class TestParseValidation:
     def test_parse_success_with_both_place_and_poi(self):
         """Test that parsing succeeds when both place and poi are found."""
         queries_should_succeed = [
-            ("沖繩美ら海水族館一日遊", "沖繩", ["美ら海水族館"]),
-            ("台北想去首里城", "台北", ["首里城"]),
-            ("東京行程包含萬座毛", "東京", ["萬座毛"])
+            ("沖繩美ら海水族館一日遊", "沖繩", "美ら海水族館"),
+            ("台北想去首里城", "台北", "首里城"),
+            ("東京行程包含萬座毛", "東京", "萬座毛")
         ]
         
         for query, expected_place, expected_poi in queries_should_succeed:
