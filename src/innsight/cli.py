@@ -7,11 +7,12 @@ import os
 import pandas as pd
 
 # Import modules from the same package
-from .nominatim_client import NominatimClient, NominatimError
+from .nominatim_client import NominatimClient
 from .overpass_client import fetch_overpass
 from .ors_client import get_isochrones_by_minutes
 from .tier import assign_tier
-from .parser import parse_query, extract_location_from_query, ParseError
+from .parser import parse_query, extract_location_from_query
+from .exceptions import GeocodeError, ParseError
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -161,7 +162,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except ParseError as e:
         print(str(e), file=sys.stderr)
         return 1
-    except NominatimError as e:
+    except GeocodeError as e:
         print("找不到地點", file=sys.stderr)
         return 1
     except Exception as e:

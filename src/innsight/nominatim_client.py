@@ -6,11 +6,9 @@ from typing import List, Tuple
 import requests
 from dotenv import load_dotenv
 
+from .exceptions import GeocodeError
+
 load_dotenv()
-
-
-class NominatimError(Exception):
-    """"""
 
 
 @dataclass
@@ -44,6 +42,6 @@ class NominatimClient:
                     continue
             return coords
         except requests.exceptions.RequestException as exc:
-            raise NominatimError(f"Network error: {exc}") from exc
+            raise GeocodeError(f"Network error: {exc}") from exc
         except ValueError as exc:
-            raise NominatimError("Invalid JSON received from API") from exc
+            raise GeocodeError("Invalid JSON received from API") from exc

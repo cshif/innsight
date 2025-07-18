@@ -6,12 +6,9 @@ from dotenv import load_dotenv
 from typing import Tuple, List, Dict
 from shapely.geometry import Polygon
 
+from .exceptions import IsochroneError, NetworkError
+
 load_dotenv()
-
-
-class IsochroneError(Exception):
-    """自定義異常類，當 isochrone 請求失敗且無快取可用時拋出"""
-    pass
 
 
 def retry_on_network_error(max_attempts=3, delay=1, backoff=2):

@@ -4,13 +4,10 @@ from shapely.geometry import Point
 from typing import List, Union
 from shapely.geometry import Polygon
 
+from .exceptions import TierError
+
 # 預設緩衝距離，用於處理邊界點
 DEFAULT_BUFFER = 1e-5
-
-
-class TierError(Exception):
-    """Tier 分配過程中的錯誤"""
-    pass
 
 
 def assign_tier(

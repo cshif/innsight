@@ -13,20 +13,8 @@ import os
 from functools import lru_cache
 from typing import List, Optional, Dict, Set
 
-
-class DaysOutOfRangeError(Exception):
-    """Exception raised when extracted days exceed the valid range (>14 days)."""
-    pass
-
-
-class ParseConflictError(Exception):
-    """Exception raised when there are conflicting day specifications in the same text."""
-    pass
-
-
-class ParseError(Exception):
-    """Exception raised when parsing fails due to missing required information."""
-    pass
+from .utils import combine_tokens
+from .exceptions import DaysOutOfRangeError, ParseConflictError, ParseError
 
 
 class ChineseNumberParser:
@@ -184,19 +172,13 @@ class FilterExtractor:
             return []
         
         # Combine tokens to catch split keywords
-        text_combined = self._combine_tokens(tokens)
+        text_combined = combine_tokens(tokens)
         
         # Find matching filters
         found_filters = self._find_matching_filters(tokens, text_combined)
         
         return list(found_filters)
     
-    def _combine_tokens(self, tokens: List[str]) -> str:
-        """Safely combine tokens into a single string."""
-        try:
-            return ''.join(str(token) for token in tokens if token is not None)
-        except (TypeError, AttributeError):
-            return ''
     
     def _find_matching_filters(self, tokens: List[str], combined_text: str) -> Set[str]:
         """Find all matching filter categories."""
@@ -246,19 +228,13 @@ class PoiExtractor:
             return []
         
         # Combine tokens to catch split keywords
-        text_combined = self._combine_tokens(tokens)
+        text_combined = combine_tokens(tokens)
         
         # Find matching POI attractions
         found_pois = self._find_matching_pois(tokens, text_combined)
         
         return list(found_pois)
     
-    def _combine_tokens(self, tokens: List[str]) -> str:
-        """Safely combine tokens into a single string."""
-        try:
-            return ''.join(str(token) for token in tokens if token is not None)
-        except (TypeError, AttributeError):
-            return ''
     
     def _find_matching_pois(self, tokens: List[str], combined_text: str) -> Set[str]:
         """Find all matching POI attractions."""
