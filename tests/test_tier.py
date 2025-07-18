@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 from shapely.geometry import Point, Polygon
-from scripts.tier import assign_tier, TierError
+from innsight.tier import assign_tier, TierError
 
 
 def create_test_polygons():

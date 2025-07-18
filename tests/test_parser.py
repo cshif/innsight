@@ -15,7 +15,7 @@ import time
 import random
 from typing import List
 
-from scripts.parser import (
+from innsight.parser import (
     extract_days, extract_filters, extract_poi, parse_query,
     DaysOutOfRangeError, ParseConflictError, ParseError,
     DaysExtractor, FilterExtractor, PoiExtractor, ChineseNumberParser,
@@ -713,7 +713,7 @@ class TestParserCaching:
     
     def test_lru_cache_functionality(self):
         """Test that the lru_cache creates and reuses the same parser instance."""
-        from scripts.parser import _get_default_parser
+        from innsight.parser import _get_default_parser
         
         # Get parser twice
         parser1 = _get_default_parser()
@@ -730,7 +730,7 @@ class TestParserCaching:
     
     def test_public_api_uses_same_parser_instance(self):
         """Test that all public API functions use the same cached parser instance."""
-        from scripts.parser import (
+        from innsight.parser import (
             _get_default_parser, parse_query, extract_days, 
             extract_filters, extract_poi, clear_parser_cache
         )
@@ -816,7 +816,7 @@ class TestParserCaching:
     
     def test_cache_clearing(self):
         """Test that clear_parser_cache() creates a new parser instance."""
-        from scripts.parser import _get_default_parser, clear_parser_cache
+        from innsight.parser import _get_default_parser, clear_parser_cache
         
         # Get initial parser
         parser1 = _get_default_parser()
@@ -836,7 +836,7 @@ class TestParserCaching:
     
     def test_dependency_injection(self):
         """Test that functions accept custom parser instances."""
-        from scripts.parser import (
+        from innsight.parser import (
             parse_query, extract_days, extract_filters, extract_poi,
             QueryParser, DaysExtractor, FilterExtractor, PoiExtractor
         )
@@ -865,7 +865,7 @@ class TestParserCaching:
     
     def test_parser_isolation(self):
         """Test that different parser instances don't interfere with each other."""
-        from scripts.parser import QueryParser, DaysExtractor
+        from innsight.parser import QueryParser, DaysExtractor
         
         # Create two independent parsers
         parser1 = QueryParser()
@@ -889,7 +889,7 @@ class TestParserCaching:
     def test_mock_compatibility(self):
         """Test that the new structure is compatible with mocking."""
         from unittest.mock import Mock
-        from scripts.parser import parse_query, QueryParser
+        from innsight.parser import parse_query, QueryParser
         
         # Create a mock parser
         mock_parser = Mock(spec=QueryParser)
@@ -910,7 +910,7 @@ class TestParserCaching:
     
     def test_cache_thread_safety(self):
         """Test that the cache works correctly in multi-threading scenarios."""
-        from scripts.parser import _get_default_parser
+        from innsight.parser import _get_default_parser
         import threading
         import time
         
@@ -943,12 +943,12 @@ class TestTestabilityImprovements:
     
     def setup_method(self):
         """Setup for each test method."""
-        from scripts.parser import clear_parser_cache
+        from innsight.parser import clear_parser_cache
         clear_parser_cache()
     
     def test_isolated_test_runs(self):
         """Test that tests can run in isolation without affecting each other."""
-        from scripts.parser import parse_query, QueryParser
+        from innsight.parser import parse_query, QueryParser
         
         # Test 1: Use default parser
         result1 = parse_query("住一天去沖繩")
@@ -972,7 +972,7 @@ class TestTestabilityImprovements:
     
     def test_cache_reset_between_tests(self):
         """Test that cache can be reset between tests."""
-        from scripts.parser import _get_default_parser, clear_parser_cache
+        from innsight.parser import _get_default_parser, clear_parser_cache
         
         # Get parser
         parser1 = _get_default_parser()

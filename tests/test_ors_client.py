@@ -11,9 +11,9 @@ import pytest
 from requests.exceptions import HTTPError, Timeout, ConnectionError
 from json import JSONDecodeError
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from scripts.ors_client import (
+from innsight.ors_client import (
     get_isochrones_by_minutes, 
     IsochroneError,
     _fallback_cache
@@ -254,7 +254,7 @@ class TestGetIsochronesByMinutes:
     
     @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    @patch('scripts.ors_client.logging')
+    @patch('innsight.ors_client.logging')
     def test_cache_fallback_with_warning(self, mock_logging, mock_post):
         """測試快取回退機制"""
         # 先建立快取
