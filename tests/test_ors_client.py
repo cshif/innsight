@@ -15,9 +15,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from innsight.ors_client import (
     get_isochrones_by_minutes, 
-    IsochroneError,
     _fallback_cache
 )
+from innsight.exceptions import IsochroneError, APIError
 from shapely.geometry import Polygon
 
 
@@ -301,7 +301,7 @@ class TestGetIsochronesByMinutes:
         }
         mock_post.return_value = self._create_mock_response(json_data=error_json)
         
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(APIError) as exc_info:
             get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
         
         error_msg = str(exc_info.value)

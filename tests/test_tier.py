@@ -151,7 +151,7 @@ def test_assign_tier_missing_lat_lon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df_missing_lat, polygons)
     
-    assert "缺少緯度" in str(exc_info.value)
+    assert "Missing latitude" in str(exc_info.value)
     
     # 測試 2: 缺失經度  
     df_missing_lon = pd.DataFrame([
@@ -161,7 +161,7 @@ def test_assign_tier_missing_lat_lon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df_missing_lon, polygons)
     
-    assert "缺少經度" in str(exc_info.value)
+    assert "Missing longitude" in str(exc_info.value)
     
     # 測試 3: 同時缺失緯度和經度
     df_missing_both = pd.DataFrame([
@@ -171,7 +171,7 @@ def test_assign_tier_missing_lat_lon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df_missing_both, polygons)
     
-    assert "缺少緯度 或 經度" in str(exc_info.value)
+    assert "Missing latitude or longitude" in str(exc_info.value)
     
     # 測試 4: 缺失 lat 欄位
     df_no_lat_column = pd.DataFrame([
@@ -181,7 +181,7 @@ def test_assign_tier_missing_lat_lon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df_no_lat_column, polygons)
     
-    assert "必須包含 'lat' 和 'lon' 欄位" in str(exc_info.value)
+    assert "DataFrame must contain 'lat' and 'lon' columns" in str(exc_info.value)
     
     # 測試 5: 缺失 lon 欄位
     df_no_lon_column = pd.DataFrame([
@@ -191,7 +191,7 @@ def test_assign_tier_missing_lat_lon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df_no_lon_column, polygons)
     
-    assert "必須包含 'lat' 和 'lon' 欄位" in str(exc_info.value)
+    assert "DataFrame must contain 'lat' and 'lon' columns" in str(exc_info.value)
 
 
 def test_assign_tier_invalid_polygon():
@@ -210,8 +210,8 @@ def test_assign_tier_invalid_polygon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df, polys_with_string)
     
-    assert "第2層多邊形格式不正確" in str(exc_info.value)
-    assert "必須是 Polygon 物件，實際為 str" in str(exc_info.value)
+    assert "Tier 2 polygon format error" in str(exc_info.value)
+    assert "must be Polygon object, got str" in str(exc_info.value)
     
     # 測試 2: 第三層多邊形是整數
     polys_with_int = [isochrones_15[0], isochrones_30[0], 123]
@@ -219,8 +219,8 @@ def test_assign_tier_invalid_polygon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df, polys_with_int)
     
-    assert "第3層多邊形格式不正確" in str(exc_info.value)
-    assert "必須是 Polygon 物件，實際為 int" in str(exc_info.value)
+    assert "Tier 3 polygon format error" in str(exc_info.value)
+    assert "must be Polygon object, got int" in str(exc_info.value)
     
     # 測試 3: 第一層多邊形是 None
     polys_with_none = [None, isochrones_30[0], isochrones_60[0]]
@@ -228,8 +228,8 @@ def test_assign_tier_invalid_polygon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df, polys_with_none)
     
-    assert "第1層多邊形格式不正確" in str(exc_info.value)
-    assert "必須是 Polygon 物件，實際為 NoneType" in str(exc_info.value)
+    assert "Tier 1 polygon format error" in str(exc_info.value)
+    assert "must be Polygon object, got NoneType" in str(exc_info.value)
     
     # 測試 4: 列表中包含非 Polygon 物件
     polys_with_invalid_list = [["not a polygon"], isochrones_30[0], isochrones_60[0]]
@@ -237,8 +237,8 @@ def test_assign_tier_invalid_polygon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df, polys_with_invalid_list)
     
-    assert "第1層多邊形格式不正確" in str(exc_info.value)
-    assert "列表中的元素必須是 Polygon 物件，實際為 str" in str(exc_info.value)
+    assert "Tier 1 polygon format error" in str(exc_info.value)
+    assert "list elements must be Polygon objects, got str" in str(exc_info.value)
     
     # 測試 5: 空列表
     polys_with_empty_list = [[], isochrones_30[0], isochrones_60[0]]
@@ -246,7 +246,7 @@ def test_assign_tier_invalid_polygon():
     with pytest.raises(TierError) as exc_info:
         assign_tier(df, polys_with_empty_list)
     
-    assert "第1層多邊形格式不正確" in str(exc_info.value)
+    assert "Tier 1 polygon format error" in str(exc_info.value)
 
 
 if __name__ == "__main__":

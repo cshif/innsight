@@ -6,7 +6,7 @@ from shapely.geometry import Polygon
 
 from .exceptions import TierError
 
-# 預設緩衝距離，用於處理邊界點
+# Default buffer distance for handling boundary points
 DEFAULT_BUFFER = 1e-5
 
 
@@ -16,107 +16,107 @@ def assign_tier(
         buffer: float = DEFAULT_BUFFER
 ) -> gpd.GeoDataFrame:
     """
-    根據多邊形包含關係為點位分配等級。
+    Assign tiers to points based on polygon containment.
     
     Args:
-        df: 包含 'lat' 和 'lon' 欄位的 DataFrame
+        df: DataFrame containing 'lat' and 'lon' columns
         polygons:
-            多邊形列表，依據等級排序（較小的多邊形獲得較高等級）
-            可以是 Polygon 或 List[Polygon]（自動取第一個）
-            例如：[isochrones_15, isochrones_30, isochrones_60] 其中 isochrones_15 獲得 tier=3
-        buffer: 對多邊形進行緩衝的距離，用於處理邊界點（預設 DEFAULT_BUFFER = 1e-5）
+            List of polygons, sorted by tier (smaller polygons get higher tier)
+            Can be Polygon or List[Polygon] (automatically takes first one)
+            Example: [isochrones_15, isochrones_30, isochrones_60] where isochrones_15 gets tier=3
+        buffer: Distance to buffer polygons for handling boundary points (default DEFAULT_BUFFER = 1e-5)
     
     Returns:
-        包含原始資料加上 'tier' 欄位和 Point 幾何的 GeoDataFrame
+        GeoDataFrame containing original data plus 'tier' column and Point geometry
     """
-    # 複製輸入的 DataFrame
+    # Copy input DataFrame
     gdf = df.copy()
     
-    # 驗證必要欄位是否存在
+    # Validate required columns exist
     if 'lat' not in df.columns or 'lon' not in df.columns:
-        raise TierError("DataFrame 必須包含 'lat' 和 'lon' 欄位")
+        raise TierError("DataFrame must contain 'lat' and 'lon' columns")
     
-    # 檢查是否有缺失的緯度或經度值
+    # Check for missing latitude or longitude values
     missing_lat = df['lat'].isna().any()
     missing_lon = df['lon'].isna().any()
     
     if missing_lat or missing_lon:
         missing_info = []
         if missing_lat:
-            missing_info.append("緯度")
+            missing_info.append("latitude")
         if missing_lon:
-            missing_info.append("經度")
-        raise TierError(f"缺少{' 或 '.join(missing_info)}")
+            missing_info.append("longitude")
+        raise TierError(f"Missing {' or '.join(missing_info)}")
     
-    # 處理 polygons 輸入，統一轉換為 Polygon 物件
+    # Process polygons input, convert to uniform Polygon objects
     processed_polygons = []
     for i, polygon_input in enumerate(polygons):
         try:
             if isinstance(polygon_input, (list, tuple)):
                 if len(polygon_input) == 0:
-                    raise TierError(f"第{i+1}層多邊形格式不正確：列表不能為空")
-                # 如果是列表（如 List[Polygon]），取第一個元素
+                    raise TierError(f"Tier {i+1} polygon format error: list cannot be empty")
+                # If it's a list (like List[Polygon]), take the first element
                 polygon = polygon_input[0]
-                # 驗證列表中的第一個元素是否為 Polygon
+                # Validate that the first element in the list is a Polygon
                 if not isinstance(polygon, Polygon):
-                    raise TierError(f"第{i+1}層多邊形格式不正確：列表中的元素必須是 Polygon 物件，實際為 {type(polygon).__name__}")
+                    raise TierError(f"Tier {i+1} polygon format error: list elements must be Polygon objects, got {type(polygon).__name__}")
             else:
-                # 應該是 Polygon
+                # Should be a Polygon
                 polygon = polygon_input
-                # 驗證是否為 Polygon
+                # Validate if it's a Polygon
                 if not isinstance(polygon, Polygon):
-                    raise TierError(f"第{i+1}層多邊形格式不正確：必須是 Polygon 物件，實際為 {type(polygon).__name__}")
+                    raise TierError(f"Tier {i+1} polygon format error: must be Polygon object, got {type(polygon).__name__}")
             
-            # 如果指定了緩衝距離，對多邊形進行緩衝
+            # If buffer distance is specified, buffer the polygon
             if buffer > 0:
                 polygon = polygon.buffer(buffer)
             
             processed_polygons.append(polygon)
             
         except TierError:
-            # 重新拋出 TierError
+            # Re-raise TierError
             raise
         except (AttributeError, TypeError) as e:
-            # 處理其他可能的類型錯誤
-            raise TierError(f"第{i+1}層多邊形格式不正確：{str(e)}")
+            # Handle other possible type errors
+            raise TierError(f"Tier {i+1} polygon format error: {str(e)}")
     
-    # 建立 GeoDataFrame
+    # Create GeoDataFrame
     geometry = [Point(lon, lat) for lat, lon in zip(df['lat'], df['lon'])]
     gdf = gpd.GeoDataFrame(gdf, geometry=geometry, crs='EPSG:4326')
     
-    # 初始化 tier 欄位為 0
+    # Initialize tier column to 0
     gdf['tier'] = 0
     
-    # 如果是空 DataFrame，直接返回
+    # If empty DataFrame, return directly
     if len(df) == 0:
         return gdf
     
-    # 性能優化：對於重複座標，只計算一次
-    # 創建座標到索引的映射
+    # Performance optimization: for duplicate coordinates, calculate only once
+    # Create coordinate to index mapping
     coord_key = df['lat'].round(8).astype(str) + ',' + df['lon'].round(8).astype(str)
     unique_coords = coord_key.drop_duplicates()
     
-    # 創建唯一座標的 tier 映射
+    # Create unique coordinate tier mapping
     coord_to_tier = {}
     
-    # 只對唯一座標進行 tier 計算
+    # Calculate tier only for unique coordinates
     for coord in unique_coords:
         lat_str, lon_str = coord.split(',')
         lat, lon = float(lat_str), float(lon_str)
         point = Point(lon, lat)
         
         highest_tier = 0
-        # 檢查每個多邊形，從最高等級到最低等級
+        # Check each polygon, from highest tier to lowest tier
         for i, polygon in enumerate(processed_polygons):
             tier_value = len(processed_polygons) - i
             
-            # 直接使用 Polygon 進行包含檢查
+            # Use Polygon directly for containment check
             if point.within(polygon):
                 highest_tier = max(highest_tier, tier_value)
         
         coord_to_tier[coord] = highest_tier
     
-    # 使用預計算的 tier 值
+    # Use precomputed tier values
     gdf['tier'] = coord_key.map(coord_to_tier)
     
     return gdf

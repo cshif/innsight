@@ -7,6 +7,7 @@ from requests.exceptions import RequestException, Timeout, ConnectionError
 import os
 
 from src.innsight.overpass_client import fetch_overpass
+from src.innsight.exceptions import NetworkError, APIError
 
 
 class TestOverpassClient:
@@ -104,7 +105,7 @@ class TestOverpassClient:
         """Test Overpass API request timeout."""
         mock_post.side_effect = Timeout("Request timed out")
         
-        with pytest.raises(RuntimeError, match="連線逾時或失敗"):
+        with pytest.raises(NetworkError, match="Connection timeout or failure"):
             fetch_overpass(self.test_query)
 
     @patch('src.innsight.overpass_client.requests.post')
@@ -112,7 +113,7 @@ class TestOverpassClient:
         """Test Overpass API connection error."""
         mock_post.side_effect = ConnectionError("Connection failed")
         
-        with pytest.raises(RuntimeError, match="連線逾時或失敗"):
+        with pytest.raises(NetworkError, match="Connection timeout or failure"):
             fetch_overpass(self.test_query)
 
     @patch('src.innsight.overpass_client.requests.post')
@@ -123,7 +124,7 @@ class TestOverpassClient:
         mock_response.json.side_effect = ValueError("Invalid JSON")
         mock_post.return_value = mock_response
         
-        with pytest.raises(RuntimeError, match="回傳格式不合法"):
+        with pytest.raises(APIError, match="Invalid response format"):
             fetch_overpass(self.test_query)
 
     @patch('src.innsight.overpass_client.requests.post')

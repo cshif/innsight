@@ -10,7 +10,7 @@ import os
 from src.innsight.services import AccommodationSearchService
 from src.innsight.config import AppConfig
 from src.innsight.cli import main
-from src.innsight.exceptions import ParseError, GeocodeError
+from src.innsight.exceptions import ParseError, GeocodeError, ConfigurationError
 
 
 class TestEndToEndIntegration:
@@ -233,12 +233,12 @@ class TestConfigurationIntegration:
         """Test error handling for missing environment variables."""
         # Test missing API_ENDPOINT
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError, match="API_ENDPOINT environment variable not set"):
+            with pytest.raises(ConfigurationError, match="API_ENDPOINT environment variable not set"):
                 AppConfig.from_env()
         
         # Test missing ORS_URL
         with patch.dict(os.environ, {'API_ENDPOINT': 'http://test.com'}, clear=True):
-            with pytest.raises(ValueError, match="ORS_URL environment variable not set"):
+            with pytest.raises(ConfigurationError, match="ORS_URL environment variable not set"):
                 AppConfig.from_env()
         
         # Test missing ORS_API_KEY
@@ -246,7 +246,7 @@ class TestConfigurationIntegration:
             'API_ENDPOINT': 'http://test.com',
             'ORS_URL': 'http://ors.com'
         }, clear=True):
-            with pytest.raises(ValueError, match="ORS_API_KEY environment variable not set"):
+            with pytest.raises(ConfigurationError, match="ORS_API_KEY environment variable not set"):
                 AppConfig.from_env()
 
 

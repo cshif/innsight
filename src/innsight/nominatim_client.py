@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -34,7 +32,7 @@ class NominatimClient:
             )
             resp.raise_for_status()
             data = resp.json()
-            coords: List[tuple[float, float]] = []
+            coords: List[Tuple[float, float]] = []
             for item in data:
                 try:
                     coords.append((float(item["lat"]), float(item["lon"])))

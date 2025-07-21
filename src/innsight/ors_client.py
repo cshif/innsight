@@ -1,17 +1,29 @@
-import os, requests, logging, time
+import logging
+import os
+import time
 from functools import wraps
 from json import JSONDecodeError
-from requests.exceptions import Timeout, ConnectionError, HTTPError
+from typing import Dict, List, Tuple
+
+import requests
 from dotenv import load_dotenv
-from typing import Tuple, List, Dict
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 from shapely.geometry import Polygon
 
-from .exceptions import IsochroneError, NetworkError
+from .exceptions import IsochroneError, NetworkError, APIError
 
 load_dotenv()
 
+# Configuration constants
+DEFAULT_CACHE_MAXSIZE = 128
+DEFAULT_CACHE_TTL_HOURS = 24
+DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_RETRY_DELAY = 1
+DEFAULT_BACKOFF_MULTIPLIER = 2
+DEFAULT_REQUEST_TIMEOUT = (5, 30)
 
-def retry_on_network_error(max_attempts=3, delay=1, backoff=2):
+
+def retry_on_network_error(max_attempts=DEFAULT_MAX_ATTEMPTS, delay=DEFAULT_RETRY_DELAY, backoff=DEFAULT_BACKOFF_MULTIPLIER):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -56,39 +68,39 @@ def retry_on_network_error(max_attempts=3, delay=1, backoff=2):
     return decorator
 
 
-# 自定義快取儲存
+# Custom cache storage
 _fallback_cache: Dict[Tuple, Tuple[List[Polygon], float]] = {}  # (key, (result, timestamp))
 
 
-def fallback_cache(maxsize=128, ttl_hours=24):
+def fallback_cache(maxsize=DEFAULT_CACHE_MAXSIZE, ttl_hours=DEFAULT_CACHE_TTL_HOURS):
     """
-    快取裝飾器，失敗時回退到過期快取
-    - maxsize: 最大快取項目數
-    - ttl_hours: 快取有效期（小時）
+    Cache decorator that falls back to expired cache on failure.
+    - maxsize: Maximum number of cache items
+    - ttl_hours: Cache validity period (hours)
     """
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # 建立快取鍵
+            # Build cache key
             key = (func.__name__, args, tuple(sorted(kwargs.items())))
             current_time = time.time()
             
-            # 檢查是否有有效的快取
+            # Check for valid cache
             if key in _fallback_cache:
                 cached_result, cached_time = _fallback_cache[key]
                 age_hours = (current_time - cached_time) / 3600
                 
-                # 如果快取仍在有效期內，直接返回
+                # Return cached result if still valid
                 if age_hours <= ttl_hours:
                     return cached_result
             
             try:
-                # 嘗試執行函數
+                # Try to execute function
                 result = func(*args, **kwargs)
-                # 成功時更新快取
+                # Update cache on success
                 _fallback_cache[key] = (result, current_time)
                 
-                # 清理過期快取項目
+                # Clean up expired cache items
                 if len(_fallback_cache) > maxsize:
                     expired_keys = [
                         k for k, (_, timestamp) in _fallback_cache.items()
@@ -97,7 +109,7 @@ def fallback_cache(maxsize=128, ttl_hours=24):
                     for expired_key in expired_keys:
                         _fallback_cache.pop(expired_key, None)
                     
-                    # 如果還是太多，移除最舊的項目
+                    # If still too many, remove oldest items
                     if len(_fallback_cache) > maxsize:
                         oldest_key = min(
                             _fallback_cache.keys(),
@@ -108,7 +120,7 @@ def fallback_cache(maxsize=128, ttl_hours=24):
                 return result
                 
             except (Timeout, ConnectionError, HTTPError, JSONDecodeError) as e:
-                # 只對網路相關錯誤進行快取回退
+                # Only fallback to cache for network-related errors
                 if key in _fallback_cache:
                     cached_result, cached_time = _fallback_cache[key]
                     age_hours = (current_time - cached_time) / 3600
@@ -118,10 +130,10 @@ def fallback_cache(maxsize=128, ttl_hours=24):
                     )
                     return cached_result
                 else:
-                    # 沒有快取時拋出自定義錯誤
+                    # Raise custom error when no cache available
                     raise IsochroneError(f"Isochrone request failed and no cache available: {str(e)}") from e
         
-        # 新增清理快取的方法
+        # Add cache management methods
         wrapper.cache_clear = lambda: _fallback_cache.clear()
         wrapper.cache_info = lambda: {
             'size': len(_fallback_cache),
@@ -132,8 +144,8 @@ def fallback_cache(maxsize=128, ttl_hours=24):
     return decorator
 
 
-@fallback_cache(maxsize=128, ttl_hours=24)
-@retry_on_network_error(max_attempts=3, delay=1, backoff=2)
+@fallback_cache(maxsize=DEFAULT_CACHE_MAXSIZE, ttl_hours=DEFAULT_CACHE_TTL_HOURS)
+@retry_on_network_error(max_attempts=DEFAULT_MAX_ATTEMPTS, delay=DEFAULT_RETRY_DELAY, backoff=DEFAULT_BACKOFF_MULTIPLIER)
 def _fetch_isochrones_from_api(
         profile: str,
         locations: Tuple[Tuple[float, float], ...],
@@ -147,23 +159,23 @@ def _fetch_isochrones_from_api(
             "Content-Type": "application/json; charset=utf-8",
             "Authorization": os.getenv("ORS_API_KEY"),
         },
-        timeout=(5, 30)
+        timeout=DEFAULT_REQUEST_TIMEOUT
     )
     resp.raise_for_status()
     data = resp.json()
 
-    # 檢查 API 錯誤
+    # Check for API errors
     if isinstance(data, dict) and "error" in data:
         code = data["error"].get("code")
         msg = data["error"].get("message", repr(data["error"]))
-        raise RuntimeError(f"ORS API error {code}: {msg}")
+        raise APIError(f"ORS API error {code}: {msg}", status_code=code)
 
-    # 轉換 GeoJSON 特徵為 Shapely 多邊形
+    # Convert GeoJSON features to Shapely polygons
     polygons = []
     if "features" in data:
         for feature in data["features"]:
             if feature.get("geometry", {}).get("type") == "Polygon":
-                coords = feature["geometry"]["coordinates"][0]  # 外環座標
+                coords = feature["geometry"]["coordinates"][0]  # Exterior ring coordinates
                 polygons.append(Polygon(coords))
     
     return polygons
@@ -175,25 +187,25 @@ def get_isochrones_by_minutes(
     profile: str = 'driving-car'
 ) -> List[List[Polygon]]:
     """
-    根據分鐘間隔獲取等時圈。
+    Get isochrones by minute intervals.
     
     Args:
-        coord: 座標 (lon, lat)
-        intervals: 時間間隔列表（分鐘）
-        profile: 交通模式，預設為 'driving-car'
+        coord: Coordinates (lon, lat)
+        intervals: List of time intervals (minutes)
+        profile: Transportation mode, defaults to 'driving-car'
     
     Returns:
-        等時圈列表，每個元素對應一個時間間隔
+        List of isochrones, each element corresponds to a time interval
     """
-    # 轉換分鐘為秒並進行單次 API 調用
+    # Convert minutes to seconds and make single API call
     max_range = tuple(minutes * 60 for minutes in intervals)
     all_polygons = _fetch_isochrones_from_api(profile, (coord,), max_range)
     
-    # ORS API 對每個時間範圍返回一個多邊形
-    # 將單個多邊形列表轉換為列表的列表格式以保持一致性
+    # ORS API returns one polygon per time range
+    # Convert single polygon list to list of lists format for consistency
     return [[polygon] for polygon in all_polygons]
 
-# 將快取方法暴露出來
+# Expose cache methods
 get_isochrones_by_minutes.cache_info = _fetch_isochrones_from_api.cache_info
 get_isochrones_by_minutes.cache_clear = _fetch_isochrones_from_api.cache_clear
 

@@ -2,6 +2,8 @@ import os
 import requests
 from typing import List, Dict, Any
 
+from .exceptions import NetworkError, APIError
+
 def fetch_overpass(query: str, timeout: int = 25, max_tries: int = 3) -> List[Dict[str, Any]]:
     if "[timeout:" not in query:
         query = query.replace("[out:json]", f"[out:json][timeout:{timeout}]")
@@ -14,7 +16,7 @@ def fetch_overpass(query: str, timeout: int = 25, max_tries: int = 3) -> List[Di
             return data.get("elements", [])
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
             if attempt == max_tries:
-                raise RuntimeError(f"連線逾時或失敗：{e}")
+                raise NetworkError(f"Connection timeout or failure: {e}")
         except requests.exceptions.HTTPError as e:
             # HTTP 429 / 504 常見：流量超限或查詢太大
             status = e.response.status_code
@@ -22,5 +24,5 @@ def fetch_overpass(query: str, timeout: int = 25, max_tries: int = 3) -> List[Di
                 continue
             raise  # 其他錯誤直接拋出
         except ValueError as e:
-            raise RuntimeError(f"回傳格式不合法：{e}")
-    raise RuntimeError("多次重試後仍然無法取得資料")
+            raise APIError(f"Invalid response format: {e}")
+    raise NetworkError("Unable to fetch data after multiple retries")
