@@ -14,6 +14,7 @@ from src.innsight.services import (
     TierService,
     AccommodationSearchService
 )
+from src.innsight.rating_service import RatingService
 from src.innsight.config import AppConfig
 from src.innsight.exceptions import ParseError, GeocodeError
 
@@ -171,6 +172,10 @@ class TestAccommodationService:
         assert result.iloc[0]['tourism'] == 'hotel'
         assert result.iloc[1]['osmid'] == 2
         assert result.iloc[1]['tourism'] == 'guest_house'
+        
+        # Check new columns exist
+        assert 'rating' in result.columns
+        assert 'tags' in result.columns
 
 
 class TestIsochroneService:
@@ -275,6 +280,14 @@ class TestAccommodationSearchService:
     def setup_method(self):
         """Set up test fixtures."""
         self.config = Mock(spec=AppConfig)
+        self.config.rating_weights = {
+            'tier': 4.0,
+            'rating': 2.0,
+            'parking': 1.0,
+            'wheelchair': 1.0,
+            'kids': 1.0,
+            'pet': 1.0
+        }
         self.service = AccommodationSearchService(self.config)
 
     def test_service_initialization(self):
@@ -284,6 +297,7 @@ class TestAccommodationSearchService:
         assert isinstance(self.service.accommodation_service, AccommodationService)
         assert isinstance(self.service.isochrone_service, IsochroneService)
         assert isinstance(self.service.tier_service, TierService)
+        assert isinstance(self.service.rating_service, RatingService)
 
     def test_search_accommodations_success(self):
         """Test successful accommodation search."""

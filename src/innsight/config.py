@@ -1,8 +1,8 @@
 """Configuration management for innsight application."""
 
 import os
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Tuple, Dict
 from dotenv import load_dotenv
 
 from .exceptions import ConfigurationError
@@ -37,6 +37,16 @@ class AppConfig:
     default_buffer: float = 1e-5
     max_days: int = 14
     
+    # Rating Weights
+    rating_weights: Dict[str, float] = field(default_factory=lambda: {
+        'tier': 4.0,
+        'rating': 2.0,
+        'parking': 1.0,
+        'wheelchair': 1.0,
+        'kids': 1.0,
+        'pet': 1.0
+    })
+    
     @classmethod
     def from_env(cls) -> 'AppConfig':
         """Create configuration from environment variables."""
@@ -69,3 +79,18 @@ class AppConfig:
             raise ConfigurationError("Nominatim timeout must be positive")
         if any(t <= 0 for t in self.ors_timeout):
             raise ConfigurationError("ORS timeout values must be positive")
+        
+        # Validate rating weights
+        if not isinstance(self.rating_weights, dict):
+            raise ConfigurationError("Rating weights must be a dictionary")
+        
+        required_weights = {'tier', 'rating', 'parking', 'wheelchair', 'kids', 'pet'}
+        if not required_weights.issubset(self.rating_weights.keys()):
+            missing = required_weights - set(self.rating_weights.keys())
+            raise ConfigurationError(f"Missing required rating weights: {missing}")
+        
+        for weight_name, weight_value in self.rating_weights.items():
+            if not isinstance(weight_value, (int, float)):
+                raise ConfigurationError(f"Rating weight {weight_name} must be a number, got {type(weight_value)}")
+            if weight_value < 0:
+                raise ConfigurationError(f"Rating weight {weight_name} must be non-negative, got {weight_value}")

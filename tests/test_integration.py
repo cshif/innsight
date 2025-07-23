@@ -22,6 +22,14 @@ class TestEndToEndIntegration:
         self.mock_config.api_endpoint = "http://test-nominatim.example.com"
         self.mock_config.nominatim_user_agent = "test-agent"
         self.mock_config.nominatim_timeout = 10
+        self.mock_config.rating_weights = {
+            'tier': 4.0,
+            'rating': 2.0,
+            'parking': 1.0,
+            'wheelchair': 1.0,
+            'kids': 1.0,
+            'pet': 1.0
+        }
 
     def test_complete_accommodation_search_flow(self):
         """Test complete flow from query to results."""
@@ -259,6 +267,14 @@ class TestServiceLayerIntegration:
         mock_config.api_endpoint = "http://test.com"
         mock_config.nominatim_user_agent = "test"
         mock_config.nominatim_timeout = 10
+        mock_config.rating_weights = {
+            'tier': 4.0,
+            'rating': 2.0,
+            'parking': 1.0,
+            'wheelchair': 1.0,
+            'kids': 1.0,
+            'pet': 1.0
+        }
         
         service = AccommodationSearchService(mock_config)
         
@@ -276,6 +292,14 @@ class TestServiceLayerIntegration:
     def test_service_coordination(self):
         """Test coordination between different services."""
         mock_config = Mock(spec=AppConfig)
+        mock_config.rating_weights = {
+            'tier': 4.0,
+            'rating': 2.0,
+            'parking': 1.0,
+            'wheelchair': 1.0,
+            'kids': 1.0,
+            'pet': 1.0
+        }
         
         # Create service with mocked dependencies
         service = AccommodationSearchService(mock_config)

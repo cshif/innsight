@@ -11,6 +11,7 @@ from .ors_client import get_isochrones_by_minutes
 from .tier import assign_tier
 from .parser import parse_query, extract_location_from_query
 from .exceptions import GeocodeError, ParseError
+from .rating_service import RatingService
 
 
 class QueryService:
@@ -102,17 +103,87 @@ class AccommodationService:
             lat_el = el.get("lat") or el.get("center", {}).get("lat")
             lon_el = el.get("lon") or el.get("center", {}).get("lon")
 
+            tags = el.get("tags", {})
             row = {
                 "osmid": el["id"],
                 "osmtype": el["type"],
                 "lat": lat_el,
                 "lon": lon_el,
-                "tourism": el.get("tags", {}).get("tourism"),
-                "name": el.get("tags", {}).get("name"),
+                "tourism": tags.get("tourism"),
+                "name": tags.get("name"),
+                "rating": self._extract_rating(tags),
+                "tags": self._extract_amenity_tags(tags),
             }
             rows.append(row)
         
         return pd.DataFrame(rows)
+    
+    def _extract_rating(self, tags: dict) -> Optional[float]:
+        """Extract rating from OSM tags."""
+        # Try different rating fields
+        rating_fields = ['rating', 'stars', 'quality']
+        for field in rating_fields:
+            if field in tags:
+                try:
+                    return float(tags[field])
+                except (ValueError, TypeError):
+                    continue
+        return None
+    
+    def _extract_amenity_tags(self, tags: dict) -> dict:
+        """Extract amenity tags for scoring."""
+        # Define extraction rules for each amenity
+        extraction_rules = {
+            'parking': {
+                'direct_keys': ['parking'],
+                'conditional_keys': [('parking:fee', 'no', 'yes')],  # If parking:fee=no, then parking=yes
+                'indicator_keys': []
+            },
+            'wheelchair': {
+                'direct_keys': ['wheelchair'],
+                'conditional_keys': [],
+                'indicator_keys': []
+            },
+            'kids': {
+                'direct_keys': [],
+                'conditional_keys': [],
+                'indicator_keys': ['family_friendly', 'kids', 'children']
+            },
+            'pet': {
+                'direct_keys': [],
+                'conditional_keys': [],
+                'indicator_keys': ['pets', 'pets_allowed', 'dogs']
+            }
+        }
+        
+        amenity_tags = {}
+        
+        for amenity, rules in extraction_rules.items():
+            value = None
+            
+            # Check direct keys first
+            for key in rules['direct_keys']:
+                if key in tags:
+                    value = tags[key]
+                    break
+            
+            # Check conditional keys
+            if value is None:
+                for key, condition_value, result_value in rules['conditional_keys']:
+                    if key in tags and tags[key] == condition_value:
+                        value = result_value
+                        break
+            
+            # Check indicator keys (return 'yes' if any match)
+            if value is None:
+                for key in rules['indicator_keys']:
+                    if key in tags and tags[key] in ['yes', 'true']:
+                        value = 'yes'
+                        break
+            
+            amenity_tags[amenity] = value
+            
+        return amenity_tags
 
 
 class IsochroneService:
@@ -161,6 +232,7 @@ class AccommodationSearchService:
         self.accommodation_service = AccommodationService()
         self.isochrone_service = IsochroneService(config)
         self.tier_service = TierService()
+        self.rating_service = RatingService(config)
     
     def search_accommodations(self, query: str) -> gpd.GeoDataFrame:
         """Search for accommodations based on user query."""
@@ -185,4 +257,9 @@ class AccommodationSearchService:
             return gpd.GeoDataFrame()
         
         # Assign tiers
-        return self.tier_service.assign_tiers(df, isochrones_list)
+        gdf = self.tier_service.assign_tiers(df, isochrones_list)
+        
+        # Calculate scores
+        gdf['score'] = gdf.apply(self.rating_service.score, axis=1)
+        
+        return gdf
