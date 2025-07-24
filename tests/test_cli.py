@@ -17,7 +17,7 @@ class TestCLIRegistration:
         # This test will fail initially since the CLI entry point doesn't exist yet
         result = subprocess.run(
             ["poetry", "run", "innsight", "--help"],
-            cwd="/Users/evachng/dev/innsight",
+            cwd=os.path.dirname(os.path.dirname(__file__)),
             capture_output=True,
             text=True
         )
@@ -30,7 +30,7 @@ class TestCLIRegistration:
         # Check if the entry point is registered
         result = subprocess.run(
             ["poetry", "run", "innsight", "--help"],
-            cwd="/Users/evachng/dev/innsight",
+            cwd=os.path.dirname(os.path.dirname(__file__)),
             capture_output=True,
             text=True
         )
@@ -60,7 +60,7 @@ class TestCLIHappyPath:
         
         result = subprocess.run(
             ["poetry", "run", "innsight", query],
-            cwd="/Users/evachng/dev/innsight",
+            cwd=os.path.dirname(os.path.dirname(__file__)),
             capture_output=True,
             text=True
         )
@@ -86,7 +86,7 @@ class TestCLIErrorHandling:
         
         result = subprocess.run(
             ["poetry", "run", "innsight", query],
-            cwd="/Users/evachng/dev/innsight",
+            cwd=os.path.dirname(os.path.dirname(__file__)),
             capture_output=True,
             text=True
         )
