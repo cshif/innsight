@@ -53,3 +53,8 @@ class IsochroneError(InnsightError):
 class TierError(InnsightError):
     """Raised during tier assignment process."""
     pass
+
+
+class NoAccommodationError(InnsightError):
+    """Raised when no accommodations match the specified criteria."""
+    pass
