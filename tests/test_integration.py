@@ -36,12 +36,12 @@ class TestEndToEndIntegration:
         query = "我想去沖繩的美ら海水族館住兩天"
         
         # Mock all external API calls
-        with patch('src.innsight.services.parse_query') as mock_parse, \
-             patch('src.innsight.services.extract_location_from_query') as mock_extract_location, \
-             patch('src.innsight.services.NominatimClient') as mock_nominatim_class, \
-             patch('src.innsight.services.fetch_overpass') as mock_overpass, \
-             patch('src.innsight.services.get_isochrones_by_minutes') as mock_isochrones, \
-             patch('src.innsight.services.assign_tier') as mock_assign_tier:
+        with patch('src.innsight.services.query_service.parse_query') as mock_parse, \
+             patch('src.innsight.services.query_service.extract_location_from_query') as mock_extract_location, \
+             patch('src.innsight.services.geocode_service.NominatimClient') as mock_nominatim_class, \
+             patch('src.innsight.services.accommodation_service.fetch_overpass') as mock_overpass, \
+             patch('src.innsight.services.isochrone_service.get_isochrones_by_minutes') as mock_isochrones, \
+             patch('src.innsight.services.tier_service.assign_tier') as mock_assign_tier:
             
             # Setup mock returns
             mock_parse.return_value = {'poi': 'aquarium', 'days': '2'}
@@ -131,8 +131,8 @@ class TestEndToEndIntegration:
     def test_error_propagation_through_layers(self):
         """Test that errors propagate correctly through service layers."""
         # Test ParseError propagation
-        with patch('src.innsight.services.parse_query') as mock_parse, \
-             patch('src.innsight.services.extract_location_from_query') as mock_extract:
+        with patch('src.innsight.services.query_service.parse_query') as mock_parse, \
+             patch('src.innsight.services.query_service.extract_location_from_query') as mock_extract:
             
             mock_parse.return_value = {'poi': ''}
             mock_extract.return_value = ''
@@ -144,9 +144,9 @@ class TestEndToEndIntegration:
 
     def test_geocoding_error_propagation(self):
         """Test geocoding error propagation."""
-        with patch('src.innsight.services.parse_query') as mock_parse, \
-             patch('src.innsight.services.extract_location_from_query') as mock_extract, \
-             patch('src.innsight.services.NominatimClient') as mock_nominatim_class:
+        with patch('src.innsight.services.query_service.parse_query') as mock_parse, \
+             patch('src.innsight.services.query_service.extract_location_from_query') as mock_extract, \
+             patch('src.innsight.services.geocode_service.NominatimClient') as mock_nominatim_class:
             
             mock_parse.return_value = {'poi': 'aquarium'}
             mock_extract.return_value = 'InvalidPlace'
@@ -162,10 +162,10 @@ class TestEndToEndIntegration:
 
     def test_empty_accommodation_results(self):
         """Test handling of empty accommodation results."""
-        with patch('src.innsight.services.parse_query') as mock_parse, \
-             patch('src.innsight.services.extract_location_from_query') as mock_extract, \
-             patch('src.innsight.services.NominatimClient') as mock_nominatim_class, \
-             patch('src.innsight.services.fetch_overpass') as mock_overpass:
+        with patch('src.innsight.services.query_service.parse_query') as mock_parse, \
+             patch('src.innsight.services.query_service.extract_location_from_query') as mock_extract, \
+             patch('src.innsight.services.geocode_service.NominatimClient') as mock_nominatim_class, \
+             patch('src.innsight.services.accommodation_service.fetch_overpass') as mock_overpass:
             
             mock_parse.return_value = {'poi': 'aquarium'}
             mock_extract.return_value = 'RemoteLocation'
@@ -184,11 +184,11 @@ class TestEndToEndIntegration:
 
     def test_isochrone_failure_fallback(self):
         """Test fallback when isochrones cannot be calculated."""
-        with patch('src.innsight.services.parse_query') as mock_parse, \
-             patch('src.innsight.services.extract_location_from_query') as mock_extract, \
-             patch('src.innsight.services.NominatimClient') as mock_nominatim_class, \
-             patch('src.innsight.services.fetch_overpass') as mock_overpass, \
-             patch('src.innsight.services.get_isochrones_by_minutes') as mock_isochrones:
+        with patch('src.innsight.services.query_service.parse_query') as mock_parse, \
+             patch('src.innsight.services.query_service.extract_location_from_query') as mock_extract, \
+             patch('src.innsight.services.geocode_service.NominatimClient') as mock_nominatim_class, \
+             patch('src.innsight.services.accommodation_service.fetch_overpass') as mock_overpass, \
+             patch('src.innsight.services.isochrone_service.get_isochrones_by_minutes') as mock_isochrones:
             
             mock_parse.return_value = {'poi': 'aquarium'}
             mock_extract.return_value = 'TestLocation'
