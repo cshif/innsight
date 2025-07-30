@@ -4,7 +4,6 @@ import pytest
 import pandas as pd
 import time
 import warnings
-from unittest.mock import patch
 from src.innsight.rating_service import RatingService, score_accommodation
 
 
@@ -79,6 +78,30 @@ class TestScoreAccommodation:
         # Then
         assert 0 <= score <= 100
         # Should not raise exception
+    
+    def test_nan_rating_uses_default_50(self):
+        """Test NaN rating uses default score of 50, same as None."""
+        import numpy as np
+        
+        # Test with None rating
+        row_none = {
+            'tier': 2,
+            'rating': None,
+            'tags': {'parking': 'yes', 'wheelchair': 'no'}
+        }
+        score_none = score_accommodation(row_none)
+        
+        # Test with NaN rating
+        row_nan = {
+            'tier': 2,
+            'rating': np.nan,
+            'tags': {'parking': 'yes', 'wheelchair': 'no'}
+        }
+        score_nan = score_accommodation(row_nan)
+        
+        # Both should produce the same result
+        assert score_none == score_nan
+        assert 0 <= score_nan <= 100
 
     def test_unknown_tag_value_uses_50_with_warning(self):
         """Test 4: Unknown tag values use smooth value 50 with warning."""

@@ -1,6 +1,5 @@
 """Unit tests for AccommodationSearchService."""
 
-import pytest
 from unittest.mock import Mock
 import pandas as pd
 import geopandas as gpd
@@ -262,3 +261,121 @@ class TestAccommodationSortingService:
         
         assert len(result) == 1
         assert result.iloc[0]['osmid'] == 1
+
+
+class TestMarkdownOutputService:
+    """Test cases for markdown output functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.config = Mock(spec=AppConfig)
+        self.config.rating_weights = {
+            'tier': 4.0,
+            'rating': 2.0,
+            'parking': 1.0,
+            'wheelchair': 1.0,
+            'kids': 1.0,
+            'pet': 1.0
+        }
+        self.service = AccommodationSearchService(self.config)
+    
+    def test_format_accommodations_as_markdown_basic(self):
+        """Test basic markdown formatting of accommodation results."""
+        accommodations_df = gpd.GeoDataFrame({
+            'osmid': [1, 2], 
+            'name': ['Hotel A', 'Hotel B'],
+            'tier': [3, 1],
+            'rating': [4.5, 3.0],
+            'score': [95.0, 75.0],
+            'tags': [
+                {'parking': 'yes', 'wheelchair': 'yes'},
+                {'parking': 'no', 'wheelchair': 'no'}
+            ]
+        })
+        
+        # This should fail initially as the method doesn't exist yet
+        markdown_output = self.service.format_accommodations_as_markdown(accommodations_df)
+        
+        # Expected Markdown format
+        expected_lines = [
+            "# 住宿推薦結果",
+            "",
+            "## 1. Hotel A",
+            "**分數:** 95.0",
+            "**等級:** 3",
+            "**評分:** 4.5",
+            "**設施:**",
+            "- 停車場: ✅",
+            "- 無障礙: ✅",
+            "",
+            "## 2. Hotel B", 
+            "**分數:** 75.0",
+            "**等級:** 1",
+            "**評分:** 3.0",
+            "**設施:**",
+            "- 停車場: ❌",
+            "- 無障礙: ❌"
+        ]
+        
+        assert markdown_output == "\n".join(expected_lines)
+    
+    def test_format_accommodations_as_markdown_empty(self):
+        """Test markdown formatting with empty DataFrame."""
+        empty_df = gpd.GeoDataFrame()
+        
+        markdown_output = self.service.format_accommodations_as_markdown(empty_df)
+        
+        expected = "# 住宿推薦結果\n\n沒有找到符合條件的住宿。"
+        assert markdown_output == expected
+    
+    def test_format_accommodations_as_markdown_missing_tags(self):
+        """Test markdown formatting with missing amenity tags."""
+        accommodations_df = gpd.GeoDataFrame({
+            'osmid': [1],
+            'name': ['Hotel C'],
+            'tier': [2],
+            'rating': [4.0],
+            'score': [80.0],
+            'tags': [{}]  # Empty tags
+        })
+        
+        markdown_output = self.service.format_accommodations_as_markdown(accommodations_df)
+        
+        expected_lines = [
+            "# 住宿推薦結果",
+            "",
+            "## 1. Hotel C",
+            "**分數:** 80.0",
+            "**等級:** 2", 
+            "**評分:** 4.0",
+            "**設施:**"
+        ]
+        
+        assert markdown_output == "\n".join(expected_lines)
+    
+    def test_format_accommodations_as_markdown_partial_amenities(self):
+        """Test markdown formatting with partial amenity information."""
+        accommodations_df = gpd.GeoDataFrame({
+            'osmid': [1],
+            'name': ['Hotel D'],
+            'tier': [1],
+            'rating': [3.5],
+            'score': [70.0],
+            'tags': [{'parking': 'yes', 'kids': 'no'}]  # Only some amenities
+        })
+        
+        markdown_output = self.service.format_accommodations_as_markdown(accommodations_df)
+        
+        expected_lines = [
+            "# 住宿推薦結果",
+            "",
+            "## 1. Hotel D",
+            "**分數:** 70.0",
+            "**等級:** 1",
+            "**評分:** 3.5",
+            "**設施:**",
+            "- 停車場: ✅",
+            "- 親子友善: ❌"
+        ]
+        
+        assert markdown_output == "\n".join(expected_lines)

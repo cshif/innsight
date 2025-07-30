@@ -88,10 +88,12 @@ class TestEndToEndIntegration:
             # Verify results
             assert isinstance(result, gpd.GeoDataFrame)
             assert len(result) == 2
-            assert result.iloc[0]['name'] == '沖繩海洋酒店'
-            assert result.iloc[0]['tier'] == 1
-            assert result.iloc[1]['name'] == '美ら海民宿'
-            assert result.iloc[1]['tier'] == 2
+            # Results should be sorted by score descending
+            # The service calculates scores and sorts automatically
+            assert result.iloc[0]['name'] == '美ら海民宿'  # tier 2 has higher score
+            assert result.iloc[0]['tier'] == 2
+            assert result.iloc[1]['name'] == '沖繩海洋酒店'  # tier 1 has lower score
+            assert result.iloc[1]['tier'] == 1
             
             # Verify all services were called with correct parameters
             mock_parse.assert_called_once_with(query)
@@ -336,4 +338,8 @@ class TestServiceLayerIntegration:
         service.isochrone_service.get_isochrones_with_fallback.assert_called_once_with((127.0, 26.0), [15, 30, 60])
         service.tier_service.assign_tiers.assert_called_once_with(test_df, mock_isochrones)
         
-        assert result is result_gdf
+        # The result should have scores calculated and be sorted by score descending
+        assert len(result) == 2
+        assert 'score' in result.columns
+        # Verify scores are in descending order (tier 2 should have higher score)
+        assert result.iloc[0]['score'] >= result.iloc[1]['score']

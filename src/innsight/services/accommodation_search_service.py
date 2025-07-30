@@ -1,7 +1,6 @@
 """Main accommodation search service that orchestrates the search process."""
 
-from typing import List, Optional
-import pandas as pd
+from typing import List
 import geopandas as gpd
 
 from ..config import AppConfig
@@ -53,6 +52,9 @@ class AccommodationSearchService:
         
         # Calculate scores
         gdf['score'] = gdf.apply(self.rating_service.score, axis=1)
+        
+        # Sort by score in descending order
+        gdf = self.sort_accommodations(gdf)
         
         return gdf
     
@@ -169,3 +171,50 @@ class AccommodationSearchService:
                 result_df = gpd.GeoDataFrame(result_df)
         
         return result_df
+    
+    def format_accommodations_as_markdown(self, accommodations_df: gpd.GeoDataFrame) -> str:
+        """Format accommodations as markdown output."""
+        if len(accommodations_df) == 0:
+            return "# 住宿推薦結果\n\n沒有找到符合條件的住宿。"
+        
+        lines = ["# 住宿推薦結果", ""]
+        
+        # Display top 10 results (assuming input is already sorted)
+        for idx, (_, row) in enumerate(accommodations_df.head(10).iterrows(), 1):
+            # Accommodation header
+            name = row.get('name', '未知住宿')
+            lines.append(f"## {idx}. {name}")
+            
+            # Basic info
+            score_raw = row.get('score', 0)
+            # Format score to 1 decimal place
+            score = f"{float(score_raw):.1f}" if score_raw is not None else "0.0"
+            tier = row.get('tier', 0)
+            rating = row.get('rating', 'N/A')
+            
+            lines.append(f"**分數:** {score}")
+            lines.append(f"**等級:** {tier}")
+            lines.append(f"**評分:** {rating}")
+            
+            # Amenities
+            lines.append("**設施:**")
+            tags = row.get('tags', {})
+            
+            # Format amenities with Chinese names and emoji
+            amenity_map = {
+                'parking': '停車場',
+                'wheelchair': '無障礙',
+                'kids': '親子友善',
+                'pet': '寵物友善'
+            }
+            
+            for amenity_key, amenity_name in amenity_map.items():
+                if amenity_key in tags:
+                    emoji = "✅" if tags[amenity_key] == 'yes' else "❌"
+                    lines.append(f"- {amenity_name}: {emoji}")
+            
+            # Add empty line between accommodations (except for the last one)
+            if idx < min(10, len(accommodations_df)):
+                lines.append("")
+        
+        return "\n".join(lines)

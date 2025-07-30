@@ -75,16 +75,17 @@ def _convert_rating(rating: Optional[Union[str, float]]) -> Optional[float]:
 
 def _calculate_component_scores(tier: Optional[int], rating: Optional[float], tags: dict) -> Dict[str, float]:
     """Calculate scores for all components."""
+    import pandas as pd
     scores = {}
     
     # Tier score: 0->0, 1->33.33, 2->66.67, 3->100
-    if tier is not None:
+    if tier is not None and not pd.isna(tier):
         scores['tier'] = (tier / 3.0) * 100
     else:
         scores['tier'] = 50  # Default for missing tier
     
     # Rating score: 0-5 scale -> 0-100 scale
-    if rating is not None:
+    if rating is not None and not pd.isna(rating):
         scores['rating'] = (rating / 5.0) * 100
     else:
         scores['rating'] = 50  # Default for missing rating
