@@ -43,3 +43,38 @@ class TestIsochroneService:
             result = self.service.get_isochrones_with_fallback((123.0, 25.0), [15])
             
             assert result is None
+    
+    def test_get_isochrones_with_fallback_cache_double_exception(self):
+        """Test cache fallback when second call also fails (covers lines 26-27)."""
+        with patch('src.innsight.services.isochrone_service.get_isochrones_by_minutes') as mock_get:
+            # First call fails with cache error, second call also fails
+            mock_get.side_effect = [
+                Exception("cache error occurred"),  # First call triggers cache logic
+                Exception("cache retry failed")     # Second call in cache fallback also fails
+            ]
+            
+            with patch('sys.stderr'):  # Suppress stderr output
+                result = self.service.get_isochrones_with_fallback((123.0, 25.0), [15])
+            
+            # Should return None when both calls fail
+            assert result is None
+            # Verify both calls were made
+            assert mock_get.call_count == 2
+    
+    def test_get_isochrones_with_fallback_cache_success_on_retry(self):
+        """Test cache fallback succeeds on retry."""
+        with patch('src.innsight.services.isochrone_service.get_isochrones_by_minutes') as mock_get:
+            # First call fails with cache error, second call succeeds
+            mock_isochrones = [{'geometry': 'cached_polygon'}]
+            mock_get.side_effect = [
+                Exception("Cache timeout error"),  # First call triggers cache logic
+                mock_isochrones                    # Second call succeeds
+            ]
+            
+            with patch('sys.stderr'):  # Suppress stderr output
+                result = self.service.get_isochrones_with_fallback((123.0, 25.0), [15])
+            
+            # Should return the successful result
+            assert result == mock_isochrones
+            # Verify both calls were made
+            assert mock_get.call_count == 2

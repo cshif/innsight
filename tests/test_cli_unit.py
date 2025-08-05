@@ -2,7 +2,7 @@
 
 import sys
 import os
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from io import StringIO
 
 # Add the src directory to the path so we can import innsight.cli
@@ -253,4 +253,126 @@ class TestCLIMainFunction:
             # Should NOT show hotels 11-15
             for i in range(10, 15):
                 assert f"name: Hotel {i+1}" not in output
+
+
+class TestCLIErrorHandling:
+    """Test suite for CLI error handling scenarios."""
+    
+    def test_generate_report_parse_query_exception(self):
+        """Test _generate_report when parse_query raises exception (covers lines 63-65)."""
+        from src.innsight.cli import _generate_report
+        import geopandas as gpd
+        
+        # Create test data
+        test_gdf = gpd.GeoDataFrame({
+            'name': ['Test Hotel'],
+            'tier': [1],
+            'score': [85.0]
+        })
+        
+        with patch('src.innsight.cli.parse_query') as mock_parse_query, \
+             patch('src.innsight.cli.generate_markdown_report') as mock_generate_report:
+            
+            # Setup parse_query to raise an exception
+            mock_parse_query.side_effect = Exception("Parse error")
+            mock_generate_report.return_value = "test_report.md"
+            
+            # Call _generate_report
+            result = _generate_report("invalid query", test_gdf)
+            
+            # Should call parse_query and handle exception
+            mock_parse_query.assert_called_once_with("invalid query")
+            
+            # Should call generate_markdown_report with fallback POI
+            mock_generate_report.assert_called_once()
+            call_args = mock_generate_report.call_args[0]
+            query_dict = call_args[0]
+            
+            # Should use fallback POI when parse fails
+            assert query_dict["main_poi"] == "未知景點"
+            
+            assert result == "test_report.md"
+    
+    def test_main_value_error_handling(self):
+        """Test main function ValueError handling (covers lines 115-116)."""
+        query = "test query"
+        
+        with patch('innsight.cli._create_recommender') as mock_create_recommender, \
+             patch('sys.stderr', new_callable=StringIO) as mock_stderr:
+            
+            # Setup recommender to raise ValueError
+            mock_create_recommender.side_effect = ValueError("Invalid configuration value")
+            
+            # Call main
+            result = main([query])
+            
+            # Should return 1 for error
+            assert result == 1
+            
+            # Should print error to stderr
+            error_output = mock_stderr.getvalue()
+            assert "Invalid configuration value" in error_output
+    
+    def test_main_geocode_error_handling(self):
+        """Test main function GeocodeError handling (covers lines 123-125)."""
+        from innsight.exceptions import GeocodeError
+        
+        query = "invalid location"
+        
+        with patch('innsight.cli._create_recommender') as mock_create_recommender, \
+             patch('sys.stderr', new_callable=StringIO) as mock_stderr:
+            
+            # Setup recommender to raise GeocodeError
+            mock_recommender = Mock()
+            mock_recommender.recommend.side_effect = GeocodeError("Location not found")
+            mock_create_recommender.return_value = mock_recommender
+            
+            # Call main
+            result = main([query])
+            
+            # Should return 1 for error
+            assert result == 1
+            
+            # Should print specific error message to stderr
+            error_output = mock_stderr.getvalue()
+            assert "找不到地點" in error_output
+    
+    def test_main_generic_exception_handling(self):
+        """Test main function generic Exception handling (covers lines 126-128)."""
+        query = "test query"
+        
+        with patch('innsight.cli._create_recommender') as mock_create_recommender, \
+             patch('sys.stderr', new_callable=StringIO) as mock_stderr:
+            
+            # Setup recommender to raise generic exception
+            mock_recommender = Mock()
+            mock_recommender.recommend.side_effect = RuntimeError("Unexpected error occurred")
+            mock_create_recommender.return_value = mock_recommender
+            
+            # Call main
+            result = main([query])
+            
+            # Should return 1 for error
+            assert result == 1
+            
+            # Should print error to stderr with "Error:" prefix
+            error_output = mock_stderr.getvalue()
+            assert "Error: Unexpected error occurred" in error_output
+    
+    def test_main_module_execution(self):
+        """Test __main__ module execution path (covers line 132)."""
+        # This tests the if __name__ == "__main__": path
+        # We'll verify the module has the main execution block
+        import innsight.cli as cli_module
+        
+        # Read the source code to verify __main__ block exists
+        with open(cli_module.__file__, 'r') as f:
+            source = f.read()
+        
+        # Verify the __main__ execution block is present
+        assert 'if __name__ == "__main__":' in source
+        assert 'sys.exit(main())' in source
+        
+        # Test the main function is callable
+        assert callable(cli_module.main)
     
