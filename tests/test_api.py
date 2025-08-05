@@ -168,7 +168,7 @@ class TestRecommendAPI:
     def test_recommend_invalid_json(self):
         """Test recommendation with invalid JSON."""
         # Act
-        response = self.client.post("/recommend", data="invalid json")
+        response = self.client.post("/recommend", content="invalid json")
         
         # Assert
         assert response.status_code == 422  # Unprocessable Entity
