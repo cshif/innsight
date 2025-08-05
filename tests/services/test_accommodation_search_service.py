@@ -3,6 +3,7 @@
 from unittest.mock import Mock
 import pandas as pd
 import geopandas as gpd
+import pytest
 
 from src.innsight.services.accommodation_search_service import AccommodationSearchService
 from src.innsight.services.query_service import QueryService
@@ -379,3 +380,126 @@ class TestMarkdownOutputService:
         ]
         
         assert markdown_output == "\n".join(expected_lines)
+
+
+class TestAccommodationDataValidation:
+    """Test cases for accommodation data validation."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.config = Mock(spec=AppConfig)
+        self.config.rating_weights = {
+            'tier': 4.0,
+            'rating': 2.0,
+            'parking': 1.0,
+            'wheelchair': 1.0,
+            'kids': 1.0,
+            'pet': 1.0
+        }
+        self.service = AccommodationSearchService(self.config)
+    
+    def test_validate_empty_dataframe(self):
+        """Test validation of empty dataframe."""
+        empty_df = gpd.GeoDataFrame()
+        
+        # Should not raise any exception
+        self.service._validate_accommodation_data(empty_df)
+    
+    def test_validate_missing_required_columns(self):
+        """Test validation fails when required columns are missing."""
+        df = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0]
+            # Missing 'tier' column
+        })
+        
+        with pytest.raises(ValueError, match="Missing required columns: \\['tier'\\]"):
+            self.service._validate_accommodation_data(df)
+    
+    def test_validate_score_range_valid(self):
+        """Test validation passes for valid score ranges."""
+        df = gpd.GeoDataFrame({
+            'name': ['Hotel A', 'Hotel B'],
+            'score': [0.0, 100.0],
+            'tier': [1, 2]
+        })
+        
+        # Should not raise any exception
+        self.service._validate_accommodation_data(df)
+    
+    def test_validate_score_range_invalid_low(self):
+        """Test validation fails for scores below 0."""
+        df = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [-1.0],
+            'tier': [1]
+        })
+        
+        with pytest.raises(ValueError, match="score must be between 0-100, got -1.0"):
+            self.service._validate_accommodation_data(df)
+    
+    def test_validate_score_range_invalid_high(self):
+        """Test validation fails for scores above 100."""
+        df = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [101.0],
+            'tier': [1]
+        })
+        
+        with pytest.raises(ValueError, match="score must be between 0-100, got 101.0"):
+            self.service._validate_accommodation_data(df)
+    
+    def test_validate_tier_range_valid(self):
+        """Test validation passes for valid tier ranges."""
+        df = gpd.GeoDataFrame({
+            'name': ['Hotel A', 'Hotel B'],
+            'score': [85.0, 90.0],
+            'tier': [0, 3]
+        })
+        
+        # Should not raise any exception
+        self.service._validate_accommodation_data(df)
+    
+    def test_validate_tier_range_invalid_low(self):
+        """Test validation fails for tiers below 0."""
+        df = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [-1]
+        })
+        
+        with pytest.raises(ValueError, match="tier must be between 0-3, got -1"):
+            self.service._validate_accommodation_data(df)
+    
+    def test_validate_tier_range_invalid_high(self):
+        """Test validation fails for tiers above 3."""
+        df = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [4]
+        })
+        
+        with pytest.raises(ValueError, match="tier must be between 0-3, got 4"):
+            self.service._validate_accommodation_data(df)
+    
+    def test_validate_name_type_valid(self):
+        """Test validation passes for valid name types."""
+        df = gpd.GeoDataFrame({
+            'name': ['Hotel A', None],
+            'score': [85.0, 90.0],
+            'tier': [1, 2]
+        })
+        
+        # Should not raise any exception
+        self.service._validate_accommodation_data(df)
+    
+    def test_validate_name_type_invalid(self):
+        """Test validation fails for invalid name types."""
+        df = gpd.GeoDataFrame({
+            'name': [123],  # Invalid type
+            'score': [85.0],
+            'tier': [1]
+        })
+        
+        with pytest.raises(TypeError, match="name must be str or None, got <class 'numpy.float64'>"):
+            self.service._validate_accommodation_data(df)

@@ -92,37 +92,50 @@ class AccommodationSearchService:
         if len(df) == 0:
             return
             
-        # Validate required columns exist
+        self._validate_required_columns(df)
+        self._validate_score_ranges(df)
+        self._validate_tier_ranges(df)
+        self._validate_name_types(df)
+    
+    def _validate_required_columns(self, df: gpd.GeoDataFrame) -> None:
+        """Validate that all required columns exist."""
         required_columns = ['name', 'score', 'tier']
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             raise ValueError(f"Missing required columns: {missing_columns}")
-        
-        # Use vectorized operations for better performance
-        # Validate score ranges (more efficient than row iteration)
-        if 'score' in df.columns:
-            score_mask = df['score'].notna()
-            if score_mask.any():
-                invalid_scores = ((df['score'] < 0) | (df['score'] > 100)) & score_mask
-                if invalid_scores.any():
-                    first_invalid = df[invalid_scores].index[0]
-                    raise ValueError(f"Row {first_invalid}: score must be between 0-100, got {df.loc[first_invalid, 'score']}")
-        
-        # Validate tier ranges
-        if 'tier' in df.columns:
-            tier_mask = df['tier'].notna()
-            if tier_mask.any():
-                invalid_tiers = ((df['tier'] < 0) | (df['tier'] > 3)) & tier_mask
-                if invalid_tiers.any():
-                    first_invalid = df[invalid_tiers].index[0]
-                    raise ValueError(f"Row {first_invalid}: tier must be between 0-3, got {df.loc[first_invalid, 'tier']}")
-        
+    
+    def _validate_score_ranges(self, df: gpd.GeoDataFrame) -> None:
+        """Validate score values are within valid range (0-100)."""
+        if 'score' not in df.columns:
+            return
+            
+        score_mask = df['score'].notna()
+        if not score_mask.any():
+            return
+            
+        invalid_scores = ((df['score'] < 0) | (df['score'] > 100)) & score_mask
+        if invalid_scores.any():
+            first_invalid = df[invalid_scores].index[0]
+            raise ValueError(f"Row {first_invalid}: score must be between 0-100, got {df.loc[first_invalid, 'score']}")
+    
+    def _validate_tier_ranges(self, df: gpd.GeoDataFrame) -> None:
+        """Validate tier values are within valid range (0-3)."""
+        if 'tier' not in df.columns:
+            return
+            
+        tier_mask = df['tier'].notna()
+        if not tier_mask.any():
+            return
+            
+        invalid_tiers = ((df['tier'] < 0) | (df['tier'] > 3)) & tier_mask
+        if invalid_tiers.any():
+            first_invalid = df[invalid_tiers].index[0]
+            raise ValueError(f"Row {first_invalid}: tier must be between 0-3, got {df.loc[first_invalid, 'tier']}")
+    
+    def _validate_name_types(self, df: gpd.GeoDataFrame) -> None:
+        """Validate name column contains only strings or None values."""
         # Only validate types for a sample if needed (for performance)
-        if len(df) > 100:
-            # Sample validation for large datasets
-            sample_df = df.head(10)
-        else:
-            sample_df = df
+        sample_df = df.head(10) if len(df) > 100 else df
             
         # Validate name types on sample
         for idx, row in sample_df.iterrows():
