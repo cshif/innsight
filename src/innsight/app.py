@@ -12,3 +12,6 @@ def create_app() -> FastAPI:
         return r.run(query)
 
     return app
+
+# Create the app instance for FastAPI CLI
+app = create_app()
