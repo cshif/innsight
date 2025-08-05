@@ -7,6 +7,7 @@ import sys
 # Import modules from the same package
 from .config import AppConfig
 from .services import AccommodationSearchService
+from .recommender import Recommender
 from .exceptions import GeocodeError, ParseError, ConfigurationError
 from .reporter import generate_markdown_report
 from .parser import parse_query
@@ -71,10 +72,11 @@ def _generate_report(query: str, gdf) -> str:
     return file_path
 
 
-def _create_search_service() -> AccommodationSearchService:
-    """Factory function to create and configure the search service."""
+def _create_recommender() -> Recommender:
+    """Factory function to create and configure the recommender."""
     config = AppConfig.from_env()
-    return AccommodationSearchService(config)
+    search_service = AccommodationSearchService(config)
+    return Recommender(search_service)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -91,11 +93,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         return e.code or 0
     
     try:
-        # Initialize service through dependency injection
-        search_service = _create_search_service()
+        # Initialize recommender through dependency injection
+        recommender = _create_recommender()
         
-        # Search for accommodations
-        gdf = search_service.search_accommodations(args.query)
+        # Get accommodation recommendations
+        gdf = recommender.recommend(args.query)
         
         # Generate report if requested
         if args.report:
@@ -104,7 +106,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         
         # Output results to terminal if not generating report only, or if both options are specified
         if not args.report or args.markdown:
-            _output_results(gdf, markdown=args.markdown, search_service=search_service)
+            _output_results(gdf, markdown=args.markdown, search_service=recommender.search_service)
         
         return 0
         

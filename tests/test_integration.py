@@ -105,30 +105,25 @@ class TestEndToEndIntegration:
 
     def test_cli_integration_with_mocked_services(self):
         """Test CLI integration with mocked services."""
-        # Mock the entire search service
-        with patch('src.innsight.cli.AppConfig') as mock_config_class, \
-             patch('src.innsight.cli.AccommodationSearchService') as mock_service_class:
+        # Mock the recommender creation function
+        with patch('src.innsight.cli._create_recommender') as mock_create_recommender:
             
-            # Setup config mock
-            mock_config = Mock()
-            mock_config_class.from_env.return_value = mock_config
-            
-            # Setup service mock
-            mock_service = Mock()
+            # Setup recommender mock
+            mock_recommender = Mock()
             mock_gdf = gpd.GeoDataFrame({
                 'name': ['Test Hotel', 'Test Guesthouse'],
-                'tier': [1, 2]
+                'tier': [1, 2],
+                'score': [80.0, 75.0]  # Add scores to avoid len() error
             })
-            mock_service.search_accommodations.return_value = mock_gdf
-            mock_service_class.return_value = mock_service
+            mock_recommender.recommend.return_value = mock_gdf
+            mock_create_recommender.return_value = mock_recommender
             
             # Test CLI call
             result = main(['我想去東京住一天'])
             
             assert result == 0
-            mock_config_class.from_env.assert_called_once()
-            mock_service_class.assert_called_once_with(mock_config)
-            mock_service.search_accommodations.assert_called_once_with('我想去東京住一天')
+            mock_create_recommender.assert_called_once()
+            mock_recommender.recommend.assert_called_once_with('我想去東京住一天')
 
     def test_error_propagation_through_layers(self):
         """Test that errors propagate correctly through service layers."""

@@ -55,13 +55,12 @@ class TestCLIMainFunction:
         """Test that --markdown flag produces markdown output."""
         query = "我想去東京住一天"
         
-        with patch('innsight.cli.AppConfig') as mock_config_class, \
-             patch('innsight.cli.AccommodationSearchService') as mock_service_class, \
+        with patch('innsight.cli._create_recommender') as mock_create_recommender, \
              patch('sys.stdout', new_callable=StringIO) as mock_stdout:
             
             # Setup mocks
-            mock_config = mock_config_class.from_env.return_value
-            mock_service = mock_service_class.return_value
+            mock_recommender = mock_create_recommender.return_value
+            mock_search_service = mock_recommender.search_service
             
             # Mock search results with some sample data
             import geopandas as gpd
@@ -72,8 +71,8 @@ class TestCLIMainFunction:
                 'rating': [4.2],
                 'tags': [{'parking': 'yes', 'wheelchair': 'no'}]
             })
-            mock_service.search_accommodations.return_value = mock_gdf
-            mock_service.format_accommodations_as_markdown.return_value = "# 住宿推薦結果\n\n## 1. 東京酒店"
+            mock_recommender.recommend.return_value = mock_gdf
+            mock_search_service.format_accommodations_as_markdown.return_value = "# 住宿推薦結果\n\n## 1. 東京酒店"
             
             result = main([query, '--markdown'])
             
@@ -81,20 +80,19 @@ class TestCLIMainFunction:
             output = mock_stdout.getvalue()
             assert "# 住宿推薦結果" in output
             assert "## 1. 東京酒店" in output
-            mock_service.format_accommodations_as_markdown.assert_called_once()
+            mock_recommender.recommend.assert_called_once_with(query)
+            mock_search_service.format_accommodations_as_markdown.assert_called_once()
     
     def test_report_generation_flag(self):
         """Test that --report flag generates markdown report file."""
         query = "我想去美ら海水族館住一天"
         
-        with patch('innsight.cli.AppConfig') as mock_config_class, \
-             patch('innsight.cli.AccommodationSearchService') as mock_service_class, \
+        with patch('innsight.cli._create_recommender') as mock_create_recommender, \
              patch('innsight.cli.generate_markdown_report') as mock_generate_report, \
              patch('sys.stdout', new_callable=StringIO) as mock_stdout:
             
             # Setup mocks
-            mock_config = mock_config_class.from_env.return_value
-            mock_service = mock_service_class.return_value
+            mock_recommender = mock_create_recommender.return_value
             
             # Mock search results
             import geopandas as gpd
@@ -105,7 +103,7 @@ class TestCLIMainFunction:
                 'rating': [4.8],
                 'tags': [{'parking': 'yes', 'wheelchair': 'yes'}]
             })
-            mock_service.search_accommodations.return_value = mock_gdf
+            mock_recommender.recommend.return_value = mock_gdf
             
             # Mock report generation
             mock_generate_report.return_value = "report/20250729_1548_abc123.md"
@@ -135,15 +133,13 @@ class TestCLIMainFunction:
         """Test that --report flag correctly extracts POI from query."""
         query = "我想去美ら海水族館住兩天要停車場"
         
-        with patch('innsight.cli.AppConfig') as mock_config_class, \
-             patch('innsight.cli.AccommodationSearchService') as mock_service_class, \
+        with patch('innsight.cli._create_recommender') as mock_create_recommender, \
              patch('innsight.cli.parse_query') as mock_parse_query, \
              patch('innsight.cli.generate_markdown_report') as mock_generate_report, \
              patch('sys.stdout', new_callable=StringIO):
             
             # Setup mocks
-            mock_config = mock_config_class.from_env.return_value
-            mock_service = mock_service_class.return_value
+            mock_recommender = mock_create_recommender.return_value
             
             # Mock parser to return POI
             mock_parse_query.return_value = {
@@ -161,7 +157,7 @@ class TestCLIMainFunction:
                 'rating': [4.0],
                 'tags': [{'parking': 'yes'}]
             })
-            mock_service.search_accommodations.return_value = mock_gdf
+            mock_recommender.recommend.return_value = mock_gdf
             
             mock_generate_report.return_value = "report/test.md"
             
@@ -184,14 +180,13 @@ class TestCLIMainFunction:
         """Test that both --report and --markdown flags work together."""
         query = "我想去東京住一天"
         
-        with patch('innsight.cli.AppConfig') as mock_config_class, \
-             patch('innsight.cli.AccommodationSearchService') as mock_service_class, \
+        with patch('innsight.cli._create_recommender') as mock_create_recommender, \
              patch('innsight.cli.generate_markdown_report') as mock_generate_report, \
              patch('sys.stdout', new_callable=StringIO) as mock_stdout:
             
             # Setup mocks
-            mock_config = mock_config_class.from_env.return_value
-            mock_service = mock_service_class.return_value
+            mock_recommender = mock_create_recommender.return_value
+            mock_search_service = mock_recommender.search_service
             
             # Mock search results
             import geopandas as gpd
@@ -202,8 +197,8 @@ class TestCLIMainFunction:
                 'rating': [4.2],
                 'tags': [{'parking': 'yes', 'wheelchair': 'no'}]
             })
-            mock_service.search_accommodations.return_value = mock_gdf
-            mock_service.format_accommodations_as_markdown.return_value = "# 住宿推薦結果\n\n## 1. 東京酒店"
+            mock_recommender.recommend.return_value = mock_gdf
+            mock_search_service.format_accommodations_as_markdown.return_value = "# 住宿推薦結果\n\n## 1. 東京酒店"
             
             # Mock report generation
             mock_generate_report.return_value = "report/20250729_1548_abc123.md"
@@ -214,7 +209,7 @@ class TestCLIMainFunction:
             
             # Should call both report generation AND terminal output
             mock_generate_report.assert_called_once()
-            mock_service.format_accommodations_as_markdown.assert_called_once()
+            mock_search_service.format_accommodations_as_markdown.assert_called_once()
             
             # Should output both report path and markdown content
             output = mock_stdout.getvalue()
@@ -226,13 +221,11 @@ class TestCLIMainFunction:
         """Test that default output (no flags) shows only top 10 results."""
         query = "我想去東京住一天"
         
-        with patch('innsight.cli.AppConfig') as mock_config_class, \
-             patch('innsight.cli.AccommodationSearchService') as mock_service_class, \
+        with patch('innsight.cli._create_recommender') as mock_create_recommender, \
              patch('sys.stdout', new_callable=StringIO) as mock_stdout:
             
             # Setup mocks
-            mock_config = mock_config_class.from_env.return_value
-            mock_service = mock_service_class.return_value
+            mock_recommender = mock_create_recommender.return_value
             
             # Mock 15 search results to test the top 10 limit
             import geopandas as gpd
@@ -242,7 +235,7 @@ class TestCLIMainFunction:
                 'score': [90-i*2 for i in range(15)]  # Descending scores
             }
             mock_gdf = gpd.GeoDataFrame(hotels_data)
-            mock_service.search_accommodations.return_value = mock_gdf
+            mock_recommender.recommend.return_value = mock_gdf
             
             result = main([query])  # No flags
             
