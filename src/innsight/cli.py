@@ -79,6 +79,20 @@ def _create_recommender() -> Recommender:
     return Recommender(search_service)
 
 
+def _handle_error(exception: Exception) -> int:
+    """Handle different types of exceptions with appropriate error messages."""
+    if isinstance(exception, GeocodeError):
+        print("找不到地點", file=sys.stderr)
+    elif isinstance(exception, Exception):
+        # Handle generic exceptions with Error: prefix
+        if type(exception).__name__ in ('ValueError', 'ConfigurationError', 'ParseError'):
+            print(str(exception), file=sys.stderr)
+        else:
+            print(f"Error: {exception}", file=sys.stderr)
+    
+    return 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Main CLI entry point."""
     # Setup argument parser
@@ -110,22 +124,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         
         return 0
         
-    except ValueError as e:
-        # Handle environment validation errors from AppConfig.from_env()
-        print(str(e), file=sys.stderr)
-        return 1
-    except ConfigurationError as e:
-        print(str(e), file=sys.stderr)
-        return 1
-    except ParseError as e:
-        print(str(e), file=sys.stderr)
-        return 1
-    except GeocodeError as e:
-        print("找不到地點", file=sys.stderr)
-        return 1
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+        return _handle_error(e)
 
 
 if __name__ == "__main__":
