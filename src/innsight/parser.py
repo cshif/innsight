@@ -88,44 +88,51 @@ class DaysExtractor:
     
     def _extract_all_days(self, text: str) -> List[int]:
         """Extract all day numbers from text."""
-        found_days = []
-        day_counts = []  # Track actual day counts vs night counts
-        night_counts = []  # Track night counts
+        day_counts = self._extract_pattern_numbers(text, r'[天日]')
+        night_counts = self._extract_pattern_numbers(text, r'[晚夜]')
         
-        # Pattern for days (天/日)
-        day_pattern = r'(\d+|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|兩)[，\s]*[天日]'
-        matches = re.findall(day_pattern, text)
+        # Check for half day/night (return empty to indicate None result)
+        if self._contains_half_day(day_counts + night_counts):
+            return []
+        
+        # Check for illogical day/night combinations
+        if self._is_illogical_combination(day_counts, night_counts):
+            return []
+        
+        return day_counts + night_counts
+    
+    def _extract_pattern_numbers(self, text: str, unit_pattern: str) -> List[int]:
+        """Extract numbers for a specific unit pattern (天/日 or 晚/夜)."""
+        number_pattern = r'(\d+|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|兩)'
+        pattern = number_pattern + r'[，\s]*' + unit_pattern
+        matches = re.findall(pattern, text)
+        
+        valid_numbers = []
         for match in matches:
-            day_num = self.number_parser.parse(match)
-            if day_num == 0.5:  # Half day
-                return []  # Return empty to indicate None result
-            if day_num > 0:
-                found_days.append(day_num)
-                day_counts.append(day_num)
+            num = self.number_parser.parse(match)
+            if num > 0:
+                valid_numbers.append(num)
         
-        # Pattern for nights (晚/夜)
-        night_pattern = r'(\d+|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|兩)[，\s]*[晚夜]'
-        matches = re.findall(night_pattern, text)
-        for match in matches:
-            night_num = self.number_parser.parse(match)
-            if night_num == 0.5:  # Half night
-                return []  # Return empty to indicate None result
-            if night_num > 0:
-                found_days.append(night_num)
-                night_counts.append(night_num)
+        return valid_numbers
+    
+    def _contains_half_day(self, numbers: List[int]) -> bool:
+        """Check if any number represents a half day (0.5)."""
+        return any(num == 0.5 for num in numbers)
+    
+    def _is_illogical_combination(self, day_counts: List[int], night_counts: List[int]) -> bool:
+        """Check for illogical day/night combinations like '一天兩夜'."""
+        if not (day_counts and night_counts):
+            return False
+            
+        # Special case: exactly one day and exactly one night value
+        if len(day_counts) == 1 and len(night_counts) == 1:
+            day_val = day_counts[0]
+            night_val = night_counts[0]
+            # If day < night and it's a small difference, treat as illogical
+            return day_val < night_val and (night_val - day_val) <= 1
         
-        # Check for specific illogical combinations like "一天兩夜"
-        if day_counts and night_counts:
-            # Special case: exactly one day and exactly one night value
-            if len(day_counts) == 1 and len(night_counts) == 1:
-                day_val = day_counts[0]
-                night_val = night_counts[0]
-                # If day < night and it's a small difference, treat as illogical
-                if day_val < night_val and (night_val - day_val) <= 1:
-                    return []  # Return empty to indicate None result (illogical)
-            # For more complex cases with multiple values, let _resolve_conflicts handle it
-        
-        return found_days
+        # For more complex cases, let _resolve_conflicts handle it
+        return False
     
     def _resolve_conflicts(self, found_days: List[int]) -> int:
         """Resolve conflicts in day specifications."""

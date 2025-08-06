@@ -6,7 +6,7 @@
 import os
 import sys
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
 import pytest
 from requests.exceptions import HTTPError, Timeout, ConnectionError
 from json import JSONDecodeError
@@ -147,9 +147,10 @@ class TestGetIsochronesByMinutes:
 
     # === HTTP 錯誤處理測試 ===
     
+    @patch('time.sleep')
     @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    def test_503_service_unavailable_no_cache(self, mock_post):
+    def test_503_service_unavailable_no_cache(self, mock_post, mock_sleep):
         """測試 503 Service Unavailable 且無快取時拋出 IsochroneError"""
         error = HTTPError("503 Service Unavailable")
         error.response = Mock(status_code=503)
@@ -162,10 +163,16 @@ class TestGetIsochronesByMinutes:
         
         assert "no cache available" in str(exc_info.value)
         assert mock_post.call_count == 3  # 重試 3 次
+        
+        # 驗證 sleep 被正確調用 (1秒, 2秒) - 重試3次但只sleep 2次
+        expected_calls = [call(1), call(2)]
+        mock_sleep.assert_has_calls(expected_calls)
+        assert mock_sleep.call_count == 2
 
+    @patch('time.sleep')
     @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    def test_429_rate_limit_retry_success(self, mock_post):
+    def test_429_rate_limit_retry_success(self, mock_post, mock_sleep):
         """測試 429 Rate Limit 重試後成功"""
         def side_effect(*args, **kwargs):
             if mock_post.call_count <= 2:
@@ -183,6 +190,11 @@ class TestGetIsochronesByMinutes:
         
         assert mock_post.call_count == 3
         self._assert_basic_result_structure(result)
+        
+        # 驗證 sleep 被正確調用 (1秒, 2秒)
+        expected_calls = [call(1), call(2)]
+        mock_sleep.assert_has_calls(expected_calls)
+        assert mock_sleep.call_count == 2
 
     @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
@@ -201,9 +213,10 @@ class TestGetIsochronesByMinutes:
 
     # === 網路連線錯誤測試 ===
     
+    @patch('time.sleep')
     @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    def test_connection_timeout_retry_success(self, mock_post):
+    def test_connection_timeout_retry_success(self, mock_post, mock_sleep):
         """測試連接超時重試後成功"""
         def side_effect(*args, **kwargs):
             if mock_post.call_count <= 2:
@@ -217,10 +230,16 @@ class TestGetIsochronesByMinutes:
         
         assert mock_post.call_count == 3
         self._assert_basic_result_structure(result)
+        
+        # 驗證 sleep 被正確調用 (1秒, 2秒)
+        expected_calls = [call(1), call(2)]
+        mock_sleep.assert_has_calls(expected_calls)
+        assert mock_sleep.call_count == 2
 
+    @patch('time.sleep')
     @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    def test_connection_error_max_retries_exceeded(self, mock_post):
+    def test_connection_error_max_retries_exceeded(self, mock_post, mock_sleep):
         """測試連接錯誤超過最大重試次數"""
         mock_post.side_effect = ConnectionError("Connection failed")
         
@@ -229,10 +248,16 @@ class TestGetIsochronesByMinutes:
         
         assert "no cache available" in str(exc_info.value)
         assert mock_post.call_count == 3
+        
+        # 驗證 sleep 被正確調用 (1秒, 2秒) - 重試3次但只sleep 2次
+        expected_calls = [call(1), call(2)]
+        mock_sleep.assert_has_calls(expected_calls)
+        assert mock_sleep.call_count == 2
 
+    @patch('time.sleep')
     @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    def test_json_decode_error_retry_success(self, mock_post):
+    def test_json_decode_error_retry_success(self, mock_post, mock_sleep):
         """測試 JSON 解析錯誤重試後成功"""
         def side_effect(*args, **kwargs):
             if mock_post.call_count <= 2:
@@ -249,6 +274,11 @@ class TestGetIsochronesByMinutes:
         
         assert mock_post.call_count == 3
         self._assert_basic_result_structure(result)
+        
+        # 驗證 sleep 被正確調用 (1秒, 2秒)
+        expected_calls = [call(1), call(2)]
+        mock_sleep.assert_has_calls(expected_calls)
+        assert mock_sleep.call_count == 2
 
     # === 快取回退測試 ===
     
