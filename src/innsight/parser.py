@@ -208,6 +208,32 @@ class FilterExtractor:
         return False
 
 
+class LocationExtractor:
+    """Extractor for location information from query text."""
+    
+    # 地點關鍵詞 - 只包含城市/地區，不包含景點
+    LOCATION_KEYWORDS = {
+        '沖繩': '沖繩',
+        '台北': '台北',
+        '東京': '東京',
+        '大阪': '大阪',
+        '京都': '京都',
+        '那霸': '沖繩',  # 那霸屬於沖繩
+        'Okinawa': '沖繩'
+    }
+    
+    def extract(self, text: str) -> Optional[str]:
+        """從查詢文字中提取地點信息（城市/地區）"""
+        if not text or not isinstance(text, str):
+            return None
+            
+        for keyword, location in self.LOCATION_KEYWORDS.items():
+            if keyword in text:
+                return location
+        
+        return None
+
+
 class PoiExtractor:
     """Extractor for specific POI (Point of Interest) attractions."""
     
@@ -300,12 +326,13 @@ class JiebaTokenizer:
 
 
 class QueryParser:
-    """Main parser class that combines days, filters, and POI extraction."""
+    """Main parser class that combines days, filters, POI, and location extraction."""
     
     def __init__(self):
         self.days_extractor = DaysExtractor()
         self.filter_extractor = FilterExtractor()
         self.poi_extractor = PoiExtractor()
+        self.location_extractor = LocationExtractor()
         self.tokenizer = JiebaTokenizer()
     
     def parse(self, text: str) -> Dict[str, any]:
@@ -322,73 +349,52 @@ class QueryParser:
             # Tokenize text
             tokens = self.tokenizer.tokenize(text)
             
-            # Extract days, filters, and POI
-            days = self.days_extractor.extract(text)
-            filters = self.filter_extractor.extract(tokens)
-            poi = self.poi_extractor.extract(tokens)
+            # Extract all components
+            extraction_result = self._extract_all_components(text, tokens)
             
-            # Create temporary parsed result for location extraction
-            parsed_result = {
-                'days': days,
-                'filters': filters,
-                'poi': poi
-            }
-            
-            # Extract place/location
-            place = extract_location_from_query(parsed_result, text)
-            
-            # Convert poi list to single string (first poi or empty string)
-            poi_str = poi[0] if poi else ""
-            
-            # Validate that at least one of place or poi is present
-            if place is None and not poi:
-                raise ParseError("無法判斷地名或主行程")
-            
-            # Ensure place is always a string (use empty string if None)
-            place_str = place if place is not None else ""
-            
-            return {
-                'days': days,
-                'filters': filters,
-                'poi': poi_str,
-                'place': place_str
-            }
+            # Validate and return result
+            return self._validate_and_format_result(extraction_result)
             
         except ParseError:
             # Re-raise ParseError to preserve the validation message
             raise
         except Exception:
-            # Fallback: minimal parsing
-            days = self.days_extractor.extract(text)
-            filters = self.filter_extractor.extract([text])
-            poi = self.poi_extractor.extract([text])
-            
-            # Create temporary parsed result for location extraction
-            parsed_result = {
-                'days': days,
-                'filters': filters,
-                'poi': poi
-            }
-            
-            # Extract place/location
-            place = extract_location_from_query(parsed_result, text)
-            
-            # Convert poi list to single string (first poi or empty string)
-            poi_str = poi[0] if poi else ""
-            
-            # Validate that at least one of place or poi is present
-            if place is None and not poi:
-                raise ParseError("無法判斷地名或主行程")
-            
-            # Ensure place is always a string (use empty string if None)
-            place_str = place if place is not None else ""
-            
-            return {
-                'days': days,
-                'filters': filters,
-                'poi': poi_str,
-                'place': place_str
-            }
+            # Fallback: minimal parsing with raw text
+            extraction_result = self._extract_all_components(text, [text])
+            return self._validate_and_format_result(extraction_result)
+    
+    def _extract_all_components(self, text: str, tokens: List[str]) -> Dict[str, any]:
+        """Extract all components from text and tokens."""
+        return {
+            'days': self.days_extractor.extract(text),
+            'filters': self.filter_extractor.extract(tokens),
+            'poi': self.poi_extractor.extract(tokens),
+            'place': self.location_extractor.extract(text)
+        }
+    
+    def _validate_and_format_result(self, extraction_result: Dict[str, any]) -> Dict[str, any]:
+        """Validate and format the extraction result."""
+        days = extraction_result['days']
+        filters = extraction_result['filters']
+        poi = extraction_result['poi']
+        place = extraction_result['place']
+        
+        # Convert poi list to single string (first poi or empty string)
+        poi_str = poi[0] if poi else ""
+        
+        # Validate that at least one of place or poi is present
+        if place is None and not poi:
+            raise ParseError("無法判斷地名或主行程")
+        
+        # Ensure place is always a string (use empty string if None)
+        place_str = place if place is not None else ""
+        
+        return {
+            'days': days,
+            'filters': filters,
+            'poi': poi_str,
+            'place': place_str
+        }
 
 
 # Cached parser instance using lru_cache
@@ -434,22 +440,7 @@ def parse_query(text: str, parser: Optional[QueryParser] = None) -> Dict[str, an
 
 
 def extract_location_from_query(parsed_query: dict, original_query: str) -> str | None:
-    """從解析結果和原始查詢中提取地點信息（城市/地區）"""
-    
-    # 地點關鍵詞 - 只包含城市/地區，不包含景點
-    location_keywords = {
-        '沖繩': '沖繩',
-        '台北': '台北',
-        '東京': '東京',
-        '大阪': '大阪',
-        '京都': '京都',
-        '那霸': '沖繩',  # 那霸屬於沖繩
-        'Okinawa': '沖繩'
-    }
-    
-    # 檢查原始查詢中的地點
-    for keyword, location in location_keywords.items():
-        if keyword in original_query:
-            return location
-    
-    return None
+    """從解析結果和原始查詢中提取地點信息（向後兼容的包裝函數）"""
+    # 為了向後兼容性，保留這個函數但使用新的 LocationExtractor
+    location_extractor = LocationExtractor()
+    return location_extractor.extract(original_query)
