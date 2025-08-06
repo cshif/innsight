@@ -22,6 +22,15 @@ class TestRatingIntegration:
             'kids': 1.0,
             'pet': 1.0
         }
+        # Add new configuration properties
+        self.config.default_isochrone_intervals = [15, 30, 60]
+        self.config.max_score = 100
+        self.config.validation_sample_size = 10
+        self.config.validation_large_dataset_threshold = 100
+        self.config.default_top_n = 10
+        self.config.default_missing_score = 50
+        self.config.max_tier_value = 3
+        self.config.max_rating_value = 5
         self.service = AccommodationSearchService(self.config)
     
     def test_search_accommodations_includes_score(self):

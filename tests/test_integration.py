@@ -30,6 +30,15 @@ class TestEndToEndIntegration:
             'kids': 1.0,
             'pet': 1.0
         }
+        # Add new configuration properties
+        self.mock_config.default_isochrone_intervals = [15, 30, 60]
+        self.mock_config.max_score = 100
+        self.mock_config.validation_sample_size = 10
+        self.mock_config.validation_large_dataset_threshold = 100
+        self.mock_config.default_top_n = 10
+        self.mock_config.default_missing_score = 50
+        self.mock_config.max_tier_value = 3
+        self.mock_config.max_rating_value = 5
 
     def test_complete_accommodation_search_flow(self):
         """Test complete flow from query to results."""
@@ -297,6 +306,15 @@ class TestServiceLayerIntegration:
             'kids': 1.0,
             'pet': 1.0
         }
+        # Add new configuration properties
+        mock_config.default_isochrone_intervals = [15, 30, 60]
+        mock_config.max_score = 100
+        mock_config.validation_sample_size = 10
+        mock_config.validation_large_dataset_threshold = 100
+        mock_config.default_top_n = 10
+        mock_config.default_missing_score = 50
+        mock_config.max_tier_value = 3
+        mock_config.max_rating_value = 5
         
         # Create service with mocked dependencies
         service = AccommodationSearchService(mock_config)

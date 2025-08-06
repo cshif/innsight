@@ -15,6 +15,8 @@ class TestRecommender:
     def setup_method(self):
         """Set up test fixtures."""
         self.mock_search_service = Mock()
+        # Configure config mock to return expected default values
+        self.mock_search_service.config.default_top_n = 10
         self.recommender = Recommender(self.mock_search_service)
     
     def test_recommend_basic_flow(self):

@@ -57,10 +57,10 @@ def _extract_row_data(row: Union[Dict, pd.Series]) -> tuple:
     return tier, rating, tags
 
 
-def _validate_tier(tier: Optional[int]) -> None:
+def _validate_tier(tier: Optional[int], max_tier: int = 3) -> None:
     """Validate tier bounds."""
-    if tier is not None and (tier < 0 or tier > 3):
-        raise ValueError("tier must be 0-3")
+    if tier is not None and (tier < 0 or tier > max_tier):
+        raise ValueError(f"tier must be 0-{max_tier}")
 
 
 def _convert_rating(rating: Optional[Union[str, float]]) -> Optional[float]:
@@ -73,37 +73,53 @@ def _convert_rating(rating: Optional[Union[str, float]]) -> Optional[float]:
     return rating
 
 
-def _calculate_component_scores(tier: Optional[int], rating: Optional[float], tags: dict) -> Dict[str, float]:
+def _calculate_component_scores(tier: Optional[int], rating: Optional[float], tags: dict, config: Optional['AppConfig'] = None) -> Dict[str, float]:
     """Calculate scores for all components."""
     import pandas as pd
+    
+    # Get configuration values
+    if config is not None:
+        default_missing_score = config.default_missing_score
+        max_tier = config.max_tier_value
+        max_rating = config.max_rating_value
+        max_score = config.max_score
+    else:
+        # Fallback to hard-coded defaults if no config provided
+        from .config import AppConfig
+        temp_config = AppConfig(api_endpoint="", ors_url="", ors_api_key="")
+        default_missing_score = temp_config.default_missing_score
+        max_tier = temp_config.max_tier_value
+        max_rating = temp_config.max_rating_value
+        max_score = temp_config.max_score
+    
     scores = {}
     
     # Tier score: 0->0, 1->33.33, 2->66.67, 3->100
     if tier is not None and not pd.isna(tier):
-        scores['tier'] = (tier / 3.0) * 100
+        scores['tier'] = (tier / float(max_tier)) * max_score
     else:
-        scores['tier'] = 50  # Default for missing tier
+        scores['tier'] = default_missing_score  # Default for missing tier
     
     # Rating score: 0-5 scale -> 0-100 scale
     if rating is not None and not pd.isna(rating):
-        scores['rating'] = (rating / 5.0) * 100
+        scores['rating'] = (rating / float(max_rating)) * max_score
     else:
-        scores['rating'] = 50  # Default for missing rating
+        scores['rating'] = default_missing_score  # Default for missing rating
     
     # Tag scores: yes->100, no->0, unknown->50 with warning
     tag_keys = ['parking', 'wheelchair', 'kids', 'pet']
     for tag_key in tag_keys:
         tag_value = tags.get(tag_key)
         if tag_value == 'yes':
-            scores[tag_key] = 100
+            scores[tag_key] = max_score
         elif tag_value == 'no':
             scores[tag_key] = 0
         elif tag_value is None:
-            scores[tag_key] = 50  # Default for missing tag
+            scores[tag_key] = default_missing_score  # Default for missing tag
         else:
-            # Unknown value - use 50 and warn
-            scores[tag_key] = 50
-            warnings.warn(f"Unknown tag value '{tag_value}' for {tag_key}, using default 50")
+            # Unknown value - use default and warn
+            scores[tag_key] = default_missing_score
+            warnings.warn(f"Unknown tag value '{tag_value}' for {tag_key}, using default {default_missing_score}")
     
     return scores
 
@@ -127,6 +143,7 @@ class RatingService:
     
     def __init__(self, config: Optional['AppConfig'] = None):
         """Initialize the rating service with weights from config."""
+        self.config = config
         if config is not None:
             self.default_weights = config.rating_weights.copy()
         else:
@@ -143,10 +160,10 @@ class RatingService:
         Returns:
             float: Score between 0-100
         """
-        return score_accommodation(row, weights=weights, default_weights=self.default_weights)
+        return score_accommodation(row, weights=weights, default_weights=self.default_weights, config=self.config)
 
 
-def score_accommodation(row: Union[Dict, pd.Series], weights: Optional[Dict[str, float]] = None, default_weights: Optional[Dict[str, float]] = None) -> float:
+def score_accommodation(row: Union[Dict, pd.Series], weights: Optional[Dict[str, float]] = None, default_weights: Optional[Dict[str, float]] = None, config: Optional['AppConfig'] = None) -> float:
     """
     Calculate accommodation score based on tier, rating, and amenity tags.
     
@@ -173,11 +190,12 @@ def score_accommodation(row: Union[Dict, pd.Series], weights: Optional[Dict[str,
     
     # Extract and validate data
     tier, rating, tags = _extract_row_data(row)
-    _validate_tier(tier)
+    max_tier = config.max_tier_value if config else 3
+    _validate_tier(tier, max_tier)
     rating = _convert_rating(rating)
     
     # Calculate component scores
-    scores = _calculate_component_scores(tier, rating, tags)
+    scores = _calculate_component_scores(tier, rating, tags, config)
     
     # Calculate final weighted score
     return _calculate_weighted_score(scores, weights)

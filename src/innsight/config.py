@@ -2,7 +2,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 from dotenv import load_dotenv
 
 from .exceptions import ConfigurationError
@@ -32,6 +32,21 @@ class AppConfig:
     max_retry_attempts: int = 3
     retry_delay: int = 1
     retry_backoff: int = 2
+    
+    # Display Settings
+    default_top_n: int = 10
+    max_score: int = 100
+    validation_sample_size: int = 10
+    validation_large_dataset_threshold: int = 100
+    
+    # Search Settings
+    default_isochrone_intervals: List[int] = field(default_factory=lambda: [15, 30, 60])
+    aquarium_search_radius: int = 100  # meters
+    
+    # Rating Score Settings
+    default_missing_score: int = 50  # Default score for missing values
+    max_tier_value: int = 3  # Maximum tier value
+    max_rating_value: int = 5  # Maximum rating value (0-5 scale)
     
     # Tier Settings
     default_buffer: float = 1e-5

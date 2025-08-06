@@ -4,6 +4,7 @@ from typing import List, Optional
 import geopandas as gpd
 
 from .services.accommodation_search_service import AccommodationSearchService
+from .config import AppConfig
 
 
 class Recommender:
@@ -17,7 +18,7 @@ class Recommender:
         """
         self.search_service = search_service
     
-    def recommend(self, query: str, filters: Optional[List[str]] = None, top_n: int = 10) -> gpd.GeoDataFrame:
+    def recommend(self, query: str, filters: Optional[List[str]] = None, top_n: int = None) -> gpd.GeoDataFrame:
         """Get accommodation recommendations based on query and preferences.
         
         Args:
@@ -28,6 +29,10 @@ class Recommender:
         Returns:
             GeoDataFrame containing recommended accommodations
         """
+        # Use default top_n if not specified
+        if top_n is None:
+            top_n = self.search_service.config.default_top_n
+        
         # Get accommodations using existing search service
         accommodations = self.search_service.search_accommodations(query)
         

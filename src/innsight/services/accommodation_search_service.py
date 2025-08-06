@@ -41,7 +41,7 @@ class AccommodationSearchService:
         
         # Get isochrones
         coord = (float(lon), float(lat))
-        intervals = [15, 30, 60]
+        intervals = self.config.default_isochrone_intervals
         isochrones_list = self.isochrone_service.get_isochrones_with_fallback(coord, intervals)
         
         if isochrones_list is None:
@@ -113,10 +113,10 @@ class AccommodationSearchService:
         if not score_mask.any():
             return
             
-        invalid_scores = ((df['score'] < 0) | (df['score'] > 100)) & score_mask
+        invalid_scores = ((df['score'] < 0) | (df['score'] > self.config.max_score)) & score_mask
         if invalid_scores.any():
             first_invalid = df[invalid_scores].index[0]
-            raise ValueError(f"Row {first_invalid}: score must be between 0-100, got {df.loc[first_invalid, 'score']}")
+            raise ValueError(f"Row {first_invalid}: score must be between 0-{self.config.max_score}, got {df.loc[first_invalid, 'score']}")
     
     def _validate_tier_ranges(self, df: gpd.GeoDataFrame) -> None:
         """Validate tier values are within valid range (0-3)."""
@@ -135,7 +135,7 @@ class AccommodationSearchService:
     def _validate_name_types(self, df: gpd.GeoDataFrame) -> None:
         """Validate name column contains only strings or None values."""
         # Only validate types for a sample if needed (for performance)
-        sample_df = df.head(10) if len(df) > 100 else df
+        sample_df = df.head(self.config.validation_sample_size) if len(df) > self.config.validation_large_dataset_threshold else df
             
         # Validate name types on sample
         for idx, row in sample_df.iterrows():
@@ -193,7 +193,7 @@ class AccommodationSearchService:
         lines = ["# 住宿推薦結果", ""]
         
         # Display top 10 results (assuming input is already sorted)
-        for idx, (_, row) in enumerate(accommodations_df.head(10).iterrows(), 1):
+        for idx, (_, row) in enumerate(accommodations_df.head(self.config.default_top_n).iterrows(), 1):
             # Accommodation header
             name = row.get('name', '未知住宿')
             lines.append(f"## {idx}. {name}")
@@ -227,7 +227,7 @@ class AccommodationSearchService:
                     lines.append(f"- {amenity_name}: {emoji}")
             
             # Add empty line between accommodations (except for the last one)
-            if idx < min(10, len(accommodations_df)):
+            if idx < min(self.config.default_top_n, len(accommodations_df)):
                 lines.append("")
         
         return "\n".join(lines)
