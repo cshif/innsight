@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
 
     @app.post("/recommend", response_model=RecommendResponse)
     async def recommend(request: RecommendRequest, r: Recommender = Depends(get_recommender)):
-        return r.run(request.dict())
+        return r.run(request.model_dump())
 
     return app
 

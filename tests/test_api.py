@@ -50,6 +50,52 @@ class TestRecommendAPI:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
+    def test_response_format_stats_and_top(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that response has stats (tier counts) and top (recommendations array)."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A', 'Hotel B', 'Hotel C'],
+            'score': [85.0, 75.0, 65.0],
+            'tier': [1, 2, 0],
+            'lat': [25.0330, 25.0340, 25.0350],
+            'lon': [121.5654, 121.5664, 121.5674],
+            'tags': [{}, {}, {}]
+        })
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "我想去沖繩水族館 待兩天 要無障礙"
+        })
+        
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Check response structure
+        assert "stats" in data
+        assert "top" in data
+        assert "success" not in data  # Old format should not be present
+        assert "accommodations" not in data  # Old format should not be present
+        
+        # Check stats has tier counts  
+        stats = data["stats"]
+        assert stats["tier_0"] == 1
+        assert stats["tier_1"] == 1
+        assert stats["tier_2"] == 1
+        assert stats["tier_3"] == 0
+        
+        # Check top is array with correct length
+        top = data["top"]
+        assert isinstance(top, list)
+        assert len(top) == 3
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_success(self, mock_recommender_class, mock_search_service_class, mock_config):
         """Test successful recommendation request."""
         # Arrange

@@ -45,13 +45,14 @@ class Recommender:
             gdf = self.recommender.recommend(query, filters, top_n)
             
             # Convert to serializable format
-            accommodations = self._serialize_gdf(gdf)
+            top_results = self._serialize_gdf(gdf)
+            
+            # Calculate tier statistics
+            stats = self._calculate_tier_stats(gdf)
             
             return {
-                "success": True,
-                "accommodations": accommodations,
-                "total_found": len(gdf),
-                "query": query
+                "stats": stats,
+                "top": top_results
             }
             
         except Exception as e:
@@ -77,3 +78,18 @@ class Recommender:
             }
             for _, row in gdf.iterrows()
         ]
+    
+    def _calculate_tier_stats(self, gdf: gpd.GeoDataFrame) -> Dict[str, int]:
+        """Calculate tier statistics from GeoDataFrame."""
+        if len(gdf) == 0:
+            return {"tier_0": 0, "tier_1": 0, "tier_2": 0, "tier_3": 0}
+        
+        # Count occurrences of each tier
+        tier_counts = gdf['tier'].value_counts().to_dict()
+        
+        return {
+            "tier_0": tier_counts.get(0, 0),
+            "tier_1": tier_counts.get(1, 0), 
+            "tier_2": tier_counts.get(2, 0),
+            "tier_3": tier_counts.get(3, 0)
+        }
