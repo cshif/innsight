@@ -96,6 +96,82 @@ class TestRecommendAPI:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
+    def test_field_types_and_ranges(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that fields have correct types and ranges: score 0-100 float, tier 0-3 int, name str."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Test Hotel'],
+            'score': [85.5],  # Float in range 0-100
+            'tier': [2],      # Int in range 0-3
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "test query"
+        })
+        
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Check that we have at least one result
+        assert len(data["top"]) >= 1
+        first_result = data["top"][0]
+        
+        # Check field types and ranges
+        assert isinstance(first_result["name"], str)
+        assert isinstance(first_result["score"], float)
+        assert isinstance(first_result["tier"], int)
+        
+        # Check score is in range 0-100
+        assert 0.0 <= first_result["score"] <= 100.0
+        
+        # Check tier is in range 0-3  
+        assert 0 <= first_result["tier"] <= 3
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_field_validation_edge_cases(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that Pydantic validates fields correctly at boundaries."""
+        # Arrange - create data with edge values
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Edge Hotel'],
+            'score': [0.0],  # Minimum valid score
+            'tier': [3],     # Maximum valid tier
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "test query"
+        })
+        
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        first_result = data["top"][0]
+        
+        # Check boundary values are accepted
+        assert first_result["score"] == 0.0
+        assert first_result["tier"] == 3
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_success(self, mock_recommender_class, mock_search_service_class, mock_config):
         """Test successful recommendation request."""
         # Arrange
