@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Depends
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
@@ -27,8 +29,22 @@ class RecommendResponse(BaseModel):
     stats: StatsModel
     top: List[AccommodationModel]
 
+class ErrorResponse(BaseModel):
+    error: str
+    message: str
+
 def create_app() -> FastAPI:
     app = FastAPI(title="InnSight API")
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request, exc):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Parse Error",
+                "message": f"Request validation failed: {str(exc)}"
+            }
+        )
 
     from .pipeline import Recommender
     def get_recommender() -> Recommender:

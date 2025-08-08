@@ -409,5 +409,48 @@ class TestRecommendAPI:
         # Act
         response = self.client.post("/recommend", content="invalid json")
         
+        # Assert - Now returns 400 due to our error handler
+        assert response.status_code == 400
+    
+    def test_recommend_parse_error_returns_400(self):
+        """Test that parse errors return HTTP 400 with specific error message."""
+        # Act - Send request with invalid field type
+        response = self.client.post("/recommend", json={
+            "query": "test query",
+            "top_n": "invalid_number"  # Should be int, not string
+        })
+        
         # Assert
-        assert response.status_code == 422  # Unprocessable Entity
+        assert response.status_code == 400
+        data = response.json()
+        assert "error" in data
+        assert "message" in data
+        assert data["error"] == "Parse Error"
+        assert "Request validation failed" in data["message"]
+    
+    def test_recommend_missing_required_field_returns_400(self):
+        """Test that missing required fields return HTTP 400."""
+        # Act - Send request without required 'query' field
+        response = self.client.post("/recommend", json={
+            "top_n": 5
+        })
+        
+        # Assert
+        assert response.status_code == 400
+        data = response.json()
+        assert data["error"] == "Parse Error"
+        assert "Request validation failed" in data["message"]
+    
+    def test_recommend_field_validation_error_returns_400(self):
+        """Test that field validation errors return HTTP 400."""
+        # Act - Send request with top_n exceeding maximum
+        response = self.client.post("/recommend", json={
+            "query": "test query",
+            "top_n": 25  # Exceeds max limit of 20
+        })
+        
+        # Assert
+        assert response.status_code == 400
+        data = response.json()
+        assert data["error"] == "Parse Error"
+        assert "Request validation failed" in data["message"]
