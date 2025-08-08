@@ -13,7 +13,7 @@ class WeightsModel(BaseModel):
 class RecommendRequest(BaseModel):
     query: str = Field(..., description="Search query for accommodations")
     weights: Optional[WeightsModel] = None
-    top_n: Optional[int] = Field(default=20, le=20, description="Maximum number of results")
+    top_n: Optional[int] = Field(default=20, ge=1, le=20, description="Maximum number of results (1-20)")
     filters: Optional[List[str]] = None
 
 class AccommodationModel(BaseModel):

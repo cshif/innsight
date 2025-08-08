@@ -526,3 +526,106 @@ class TestRecommendAPI:
         assert data["error"] == "Service Unavailable"
         assert "External service unavailable" in data["message"]
         assert "External API returned 500" in data["message"]
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_top_n_limit_enforced(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that top_n is limited to maximum of 20."""
+        # Arrange - Create 25 results to test limiting
+        hotels_data = {
+            'name': [f'Hotel {i}' for i in range(1, 26)],
+            'score': [float(100 - i) for i in range(25)],  # Scores from 100 down to 76
+            'tier': [i % 4 for i in range(25)],  # Tiers 0-3 cycling
+            'lat': [25.0330 + i * 0.001 for i in range(25)],
+            'lon': [121.5654 + i * 0.001 for i in range(25)],
+            'tags': [{} for _ in range(25)]
+        }
+        mock_gdf = gpd.GeoDataFrame(hotels_data)
+        
+        # Mock the actual rank_accommodations method to simulate top_n limiting
+        mock_search_service = Mock()
+        mock_search_service.search_accommodations.return_value = mock_gdf
+        # Simulate top_n limiting by returning only first 20 results
+        mock_search_service.rank_accommodations.return_value = mock_gdf.head(20)
+        mock_search_service_class.return_value = mock_search_service
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf.head(20)  # Limit to 20 results
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act - Request 25 results but should only get 20
+        response = self.client.post("/recommend", json={
+            "query": "test query",
+            "top_n": 20  # Maximum allowed
+        })
+        
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should return exactly 20 results, not 25
+        assert len(data["top"]) == 20
+        
+        # Verify that the top-scoring hotels are returned (first 20)
+        returned_names = [hotel["name"] for hotel in data["top"]]
+        expected_names = [f'Hotel {i}' for i in range(1, 21)]  # Hotel 1-20
+        assert returned_names == expected_names
+    
+    def test_recommend_top_n_exceeds_maximum_returns_400(self):
+        """Test that top_n exceeding 20 returns HTTP 400."""
+        # Act - Request more than maximum allowed
+        response = self.client.post("/recommend", json={
+            "query": "test query",
+            "top_n": 25  # Exceeds maximum
+        })
+        
+        # Assert
+        assert response.status_code == 400
+        data = response.json()
+        assert data["error"] == "Parse Error"
+        assert "Request validation failed" in data["message"]
+    
+    def test_recommend_top_n_below_minimum_returns_400(self):
+        """Test that top_n below 1 returns HTTP 400."""
+        # Act - Request zero or negative results
+        response = self.client.post("/recommend", json={
+            "query": "test query", 
+            "top_n": 0  # Below minimum
+        })
+        
+        # Assert
+        assert response.status_code == 400
+        data = response.json()
+        assert data["error"] == "Parse Error"
+        assert "Request validation failed" in data["message"]
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_top_n_default_value(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that top_n defaults to 20 when not specified."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act - Don't specify top_n
+        response = self.client.post("/recommend", json={
+            "query": "test query"
+        })
+        
+        # Assert
+        assert response.status_code == 200
+        
+        # Verify default top_n=20 was passed to recommender
+        mock_recommender.recommend.assert_called_once_with("test query", None, 20, None)

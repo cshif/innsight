@@ -32,7 +32,7 @@ class Recommender:
         """
         query = query_data.get("query", "")
         filters = query_data.get("filters")
-        top_n = query_data.get("top_n", 10)
+        top_n = query_data.get("top_n", 20)
         weights = query_data.get("weights")
         
         if not query:
