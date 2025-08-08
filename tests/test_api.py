@@ -3,6 +3,7 @@
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch
 import geopandas as gpd
+import time
 
 from src.innsight.app import create_app
 
@@ -629,3 +630,137 @@ class TestRecommendAPI:
         
         # Verify default top_n=20 was passed to recommender
         mock_recommender.recommend.assert_called_once_with("test query", None, 20, None)
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_performance_under_300ms(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that recommendation requests complete within 300ms."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A', 'Hotel B', 'Hotel C'],
+            'score': [85.0, 75.0, 65.0],
+            'tier': [1, 2, 0],
+            'lat': [25.0330, 25.0340, 25.0350],
+            'lon': [121.5654, 121.5664, 121.5674],
+            'tags': [{}, {}, {}]
+        })
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act - Measure response time
+        start_time = time.perf_counter()
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿推薦",
+            "filters": ["parking", "wheelchair"],
+            "top_n": 10,
+            "weights": {"rating": 2.0, "tier": 1.5}
+        })
+        end_time = time.perf_counter()
+        
+        # Calculate response time in milliseconds
+        response_time_ms = (end_time - start_time) * 1000
+        
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify correct response format
+        assert "stats" in data
+        assert "top" in data
+        assert len(data["top"]) == 3
+        
+        # Performance requirement: response time should be under 300ms
+        assert response_time_ms < 300, f"Response time {response_time_ms:.2f}ms exceeds 300ms requirement"
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_performance_multiple_requests(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test performance consistency across multiple requests."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A', 'Hotel B'],
+            'score': [85.0, 75.0],
+            'tier': [1, 2],
+            'lat': [25.0330, 25.0340],
+            'lon': [121.5654, 121.5664],
+            'tags': [{}, {}]
+        })
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+        
+        response_times = []
+        num_requests = 5
+        
+        # Act - Make multiple requests and measure performance
+        for i in range(num_requests):
+            start_time = time.perf_counter()
+            response = self.client.post("/recommend", json={
+                "query": f"test query {i}",
+                "top_n": 10
+            })
+            end_time = time.perf_counter()
+            
+            response_time_ms = (end_time - start_time) * 1000
+            response_times.append(response_time_ms)
+            
+            # Verify successful response
+            assert response.status_code == 200
+            data = response.json()
+            assert "stats" in data
+            assert "top" in data
+        
+        # Assert - All requests should be under 300ms
+        max_time = max(response_times)
+        avg_time = sum(response_times) / len(response_times)
+        
+        assert max_time < 300, f"Maximum response time {max_time:.2f}ms exceeds 300ms requirement"
+        assert avg_time < 200, f"Average response time {avg_time:.2f}ms should be well under 300ms for consistency"
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_performance_with_maximum_results(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test performance when requesting maximum results (top_n=20)."""
+        # Arrange - Create maximum number of results
+        hotels_data = {
+            'name': [f'Hotel {i}' for i in range(1, 21)],
+            'score': [float(100 - i) for i in range(20)],
+            'tier': [i % 4 for i in range(20)],
+            'lat': [25.0330 + i * 0.001 for i in range(20)],
+            'lon': [121.5654 + i * 0.001 for i in range(20)],
+            'tags': [{} for _ in range(20)]
+        }
+        mock_gdf = gpd.GeoDataFrame(hotels_data)
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act - Request maximum results and measure time
+        start_time = time.perf_counter()
+        response = self.client.post("/recommend", json={
+            "query": "comprehensive hotel search with maximum results",
+            "top_n": 20,
+            "filters": ["parking", "wheelchair", "kids"],
+            "weights": {"rating": 3.0, "tier": 2.0}
+        })
+        end_time = time.perf_counter()
+        
+        response_time_ms = (end_time - start_time) * 1000
+        
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify maximum results returned
+        assert len(data["top"]) == 20
+        assert "stats" in data
+        
+        # Performance requirement even with maximum load
+        assert response_time_ms < 300, f"Response time {response_time_ms:.2f}ms exceeds 300ms requirement even with max results"
