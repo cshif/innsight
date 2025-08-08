@@ -15,6 +15,38 @@ class TestRecommendAPI:
         self.app = create_app()
         self.client = TestClient(self.app)
     
+    def test_openapi_spec_shows_correct_schema(self):
+        """Test that OpenAPI spec shows correct request/response schemas."""
+        response = self.client.get("/openapi.json")
+        assert response.status_code == 200
+        
+        openapi_spec = response.json()
+        paths = openapi_spec["paths"]
+        components = openapi_spec["components"]["schemas"]
+        
+        # Check POST /recommend exists
+        assert "/recommend" in paths
+        post_spec = paths["/recommend"]["post"]
+        
+        # Check request schema references and has correct properties
+        request_ref = post_spec["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+        assert request_ref == "#/components/schemas/RecommendRequest"
+        
+        request_schema = components["RecommendRequest"]
+        required_props = request_schema["properties"]
+        assert "query" in required_props
+        assert "weights" in required_props  
+        assert "top_n" in required_props
+        
+        # Check response schema references and has correct properties
+        response_ref = post_spec["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+        assert response_ref == "#/components/schemas/RecommendResponse"
+        
+        response_schema = components["RecommendResponse"]  
+        response_props = response_schema["properties"]
+        assert "stats" in response_props
+        assert "top" in response_props
+    
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
