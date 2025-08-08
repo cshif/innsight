@@ -130,10 +130,8 @@ class TestDependencyInjection:
         
         # Create a fake recommender that returns a known response
         fake_response = {
-            "success": True,
-            "accommodations": [{"name": "Fake Hotel", "score": 99.9}],
-            "total_found": 1,
-            "query": "test query"
+            "stats": {"tier_0": 0, "tier_1": 1, "tier_2": 0, "tier_3": 0},
+            "top": [{"name": "Fake Hotel", "score": 99.9, "tier": 1}]
         }
         
         def fake_recommender():
@@ -190,8 +188,8 @@ class TestDependencyInjection:
                 
                 # Then: Verify fake recommender was called
                 assert data == fake_response
-                assert data["accommodations"][0]["name"] == "Fake Hotel"
-                assert data["accommodations"][0]["score"] == 99.9
+                assert data["top"][0]["name"] == "Fake Hotel"
+                assert data["top"][0]["score"] == 99.9
                 return  # Exit early since we used the patch approach
         
         # Test the endpoint with dependency override
@@ -201,8 +199,8 @@ class TestDependencyInjection:
         assert response.status_code == 200
         data = response.json()
         assert data == fake_response
-        assert data["accommodations"][0]["name"] == "Fake Hotel"
-        assert data["accommodations"][0]["score"] == 99.9
+        assert data["top"][0]["name"] == "Fake Hotel"
+        assert data["top"][0]["score"] == 99.9
         
         # Clean up
         app.dependency_overrides.clear()
@@ -214,10 +212,8 @@ class TestDependencyInjection:
             # Setup fake recommender
             fake_recommender = Mock()
             fake_response = {
-                "success": True,
-                "accommodations": [{"name": "Patched Hotel", "score": 88.8}],
-                "total_found": 1,
-                "query": "patched query"
+                "stats": {"tier_0": 0, "tier_1": 1, "tier_2": 0, "tier_3": 0},
+                "top": [{"name": "Patched Hotel", "score": 88.8, "tier": 1}]
             }
             fake_recommender.run.return_value = fake_response
             mock_recommender_class.return_value = fake_recommender
@@ -233,7 +229,7 @@ class TestDependencyInjection:
             assert response.status_code == 200
             data = response.json()
             assert data == fake_response
-            assert data["accommodations"][0]["name"] == "Patched Hotel"
+            assert data["top"][0]["name"] == "Patched Hotel"
             
             # Verify the mock was called
             mock_recommender_class.assert_called()

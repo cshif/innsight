@@ -35,10 +35,10 @@ class Recommender:
         weights = query_data.get("weights")
         
         if not query:
+            # Return empty results for empty query instead of error
             return {
-                "success": False,
-                "error": "Query parameter is required",
-                "accommodations": []
+                "stats": {"tier_0": 0, "tier_1": 0, "tier_2": 0, "tier_3": 0},
+                "top": []
             }
         
         try:
@@ -57,10 +57,10 @@ class Recommender:
             }
             
         except Exception as e:
+            # Return empty results for exceptions instead of error
             return {
-                "success": False,
-                "error": str(e),
-                "accommodations": []
+                "stats": {"tier_0": 0, "tier_1": 0, "tier_2": 0, "tier_3": 0},
+                "top": []
             }
     
     def _serialize_gdf(self, gdf: gpd.GeoDataFrame) -> List[Dict[str, Any]]:

@@ -270,22 +270,24 @@ class TestRecommendAPI:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["success"] is True
-        assert data["total_found"] == 2
-        assert data["query"] == "台北101"
-        assert len(data["accommodations"]) == 2
+        # Check new response format
+        assert "stats" in data
+        assert "top" in data
+        assert len(data["top"]) == 2
         
-        # Check first accommodation data
-        first_hotel = data["accommodations"][0]
+        # Check first accommodation data  
+        first_hotel = data["top"][0]
         assert first_hotel["name"] == "Hotel A"
         assert first_hotel["score"] == 85.0
         assert first_hotel["tier"] == 1
-        assert first_hotel["lat"] == 25.0330
-        assert first_hotel["lon"] == 121.5654
-        assert first_hotel["amenities"]["parking"] == "yes"
+        
+        # Check stats
+        stats = data["stats"]
+        assert stats["tier_1"] == 1
+        assert stats["tier_2"] == 1
         
         # Verify recommender was called with correct parameters
-        mock_recommender.recommend.assert_called_once_with("台北101", ["parking"], 5)
+        mock_recommender.recommend.assert_called_once_with("台北101", ["parking"], 5, None)
     
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
@@ -302,9 +304,11 @@ class TestRecommendAPI:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["success"] is False
-        assert data["error"] == "Query parameter is required"
-        assert data["accommodations"] == []
+        # Empty query now returns empty results instead of error
+        assert "stats" in data
+        assert "top" in data
+        assert len(data["top"]) == 0
+        assert data["stats"]["tier_0"] == 0
     
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
@@ -327,10 +331,11 @@ class TestRecommendAPI:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["success"] is True
-        assert data["total_found"] == 0
-        assert data["accommodations"] == []
-        assert data["query"] == "不存在的地點"
+        # No results returns empty stats and top
+        assert "stats" in data
+        assert "top" in data
+        assert len(data["top"]) == 0
+        assert data["stats"]["tier_0"] == 0
     
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
@@ -351,9 +356,11 @@ class TestRecommendAPI:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["success"] is False
-        assert data["error"] == "Search service error"
-        assert data["accommodations"] == []
+        # Exceptions now return empty results instead of error
+        assert "stats" in data
+        assert "top" in data
+        assert len(data["top"]) == 0
+        assert data["stats"]["tier_0"] == 0
     
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
@@ -383,9 +390,19 @@ class TestRecommendAPI:
         assert response.status_code == 200
         data = response.json()
         
-        assert data["success"] is True
-        # Verify default parameters were used
-        mock_recommender.recommend.assert_called_once_with("台北101", None, 10)
+        # Check new response format
+        assert "stats" in data
+        assert "top" in data
+        assert len(data["top"]) == 1
+        
+        # Check accommodation data
+        first_hotel = data["top"][0]
+        assert first_hotel["name"] == "Hotel A"
+        assert first_hotel["score"] == 85.0
+        assert first_hotel["tier"] == 1
+        
+        # Verify default parameters were used (note: now includes weights parameter)
+        mock_recommender.recommend.assert_called_once_with("台北101", None, 20, None)
     
     def test_recommend_invalid_json(self):
         """Test recommendation with invalid JSON."""

@@ -35,7 +35,7 @@ class TestRecommender:
         result = self.recommender.recommend("台北101")
         
         # Assert
-        self.mock_search_service.search_accommodations.assert_called_once_with("台北101")
+        self.mock_search_service.search_accommodations.assert_called_once_with("台北101", weights=None)
         self.mock_search_service.rank_accommodations.assert_called_once_with(
             expected_gdf, filters=None, top_n=10
         )
@@ -97,7 +97,7 @@ class TestRecommender:
         result = self.recommender.recommend("不存在的地點")
         
         # Assert
-        self.mock_search_service.search_accommodations.assert_called_once_with("不存在的地點")
+        self.mock_search_service.search_accommodations.assert_called_once_with("不存在的地點", weights=None)
         self.mock_search_service.rank_accommodations.assert_not_called()
         assert len(result) == 0
         assert isinstance(result, gpd.GeoDataFrame)
