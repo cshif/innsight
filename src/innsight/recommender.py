@@ -1,6 +1,6 @@
 """Recommender class that provides a unified interface for accommodation recommendations."""
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 import geopandas as gpd
 
 from .services.accommodation_search_service import AccommodationSearchService
@@ -18,13 +18,14 @@ class Recommender:
         """
         self.search_service = search_service
     
-    def recommend(self, query: str, filters: Optional[List[str]] = None, top_n: int = None) -> gpd.GeoDataFrame:
+    def recommend(self, query: str, filters: Optional[List[str]] = None, top_n: int = None, weights: Optional[Dict[str, float]] = None) -> gpd.GeoDataFrame:
         """Get accommodation recommendations based on query and preferences.
         
         Args:
             query: Search query string
             filters: Optional list of filter conditions (e.g., ["parking", "wheelchair"])
             top_n: Maximum number of results to return
+            weights: Optional custom weights for scoring (e.g., {"rating": 10, "tier": 1})
             
         Returns:
             GeoDataFrame containing recommended accommodations
@@ -34,7 +35,7 @@ class Recommender:
             top_n = self.search_service.config.default_top_n
         
         # Get accommodations using existing search service
-        accommodations = self.search_service.search_accommodations(query)
+        accommodations = self.search_service.search_accommodations(query, weights=weights)
         
         # Apply ranking with filters if accommodations found
         if len(accommodations) > 0:

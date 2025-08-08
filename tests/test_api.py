@@ -172,6 +172,74 @@ class TestRecommendAPI:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
+    def test_custom_weights_support(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that custom weights are passed to recommender and affect results."""
+        # Arrange - Create two different result sets for different weight calls
+        default_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel B', 'Hotel A'],  # Hotel B has higher score, so it's first
+            'score': [85.0, 75.0],
+            'tier': [2, 1],
+            'lat': [25.0340, 25.0330],
+            'lon': [121.5664, 121.5654],
+            'tags': [{}, {}]
+        })
+        
+        weighted_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A', 'Hotel B'],  # Hotel A has higher score with weights, so it's first
+            'score': [85.0, 75.0],
+            'tier': [1, 2],
+            'lat': [25.0330, 25.0340], 
+            'lon': [121.5654, 121.5664],
+            'tags': [{}, {}]
+        })
+        
+        mock_recommender = Mock()
+        # Return different results based on weights parameter
+        def side_effect(*args, **kwargs):
+            # Check the 4th argument (weights) - it's query, filters, top_n, weights
+            if len(args) > 3 and args[3] is not None:  # weights parameter
+                return weighted_gdf
+            return default_gdf
+            
+        mock_recommender.recommend.side_effect = side_effect
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act - Make request without weights
+        response1 = self.client.post("/recommend", json={
+            "query": "test query"
+        })
+        
+        # Act - Make request with weights
+        response2 = self.client.post("/recommend", json={
+            "query": "test query",
+            "weights": {"rating": 10, "tier": 1}
+        })
+        
+        # Assert
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+        
+        data1 = response1.json()
+        data2 = response2.json()
+        
+        # Results should be different due to weights
+        first_hotel_1 = data1["top"][0]["name"]
+        first_hotel_2 = data2["top"][0]["name"]
+        assert first_hotel_1 != first_hotel_2
+        
+        # Verify weights were passed correctly
+        assert mock_recommender.recommend.call_count == 2
+        # First call should have None weights (4th argument)
+        first_call_args = mock_recommender.recommend.call_args_list[0][0]
+        assert len(first_call_args) >= 4 and first_call_args[3] is None
+        
+        # Second call should have weights (4th argument)
+        second_call_args = mock_recommender.recommend.call_args_list[1][0] 
+        assert len(second_call_args) >= 4 and second_call_args[3] is not None
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_success(self, mock_recommender_class, mock_search_service_class, mock_config):
         """Test successful recommendation request."""
         # Arrange

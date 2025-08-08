@@ -1,6 +1,6 @@
 """Main accommodation search service that orchestrates the search process."""
 
-from typing import List
+from typing import List, Optional, Dict
 import geopandas as gpd
 
 from ..config import AppConfig
@@ -25,7 +25,7 @@ class AccommodationSearchService:
         self.tier_service = TierService()
         self.rating_service = RatingService(config)
     
-    def search_accommodations(self, query: str) -> gpd.GeoDataFrame:
+    def search_accommodations(self, query: str, weights: Optional[Dict[str, float]] = None) -> gpd.GeoDataFrame:
         """Search for accommodations based on user query."""
         # Extract search term
         search_term = self.query_service.extract_search_term(query)
@@ -50,8 +50,8 @@ class AccommodationSearchService:
         # Assign tiers
         gdf = self.tier_service.assign_tiers(df, isochrones_list)
         
-        # Calculate scores
-        gdf['score'] = gdf.apply(self.rating_service.score, axis=1)
+        # Calculate scores with custom weights if provided
+        gdf['score'] = gdf.apply(lambda row: self.rating_service.score(row, weights), axis=1)
         
         # Sort by score in descending order
         gdf = self.sort_accommodations(gdf)

@@ -32,6 +32,7 @@ class Recommender:
         query = query_data.get("query", "")
         filters = query_data.get("filters")
         top_n = query_data.get("top_n", 10)
+        weights = query_data.get("weights")
         
         if not query:
             return {
@@ -42,7 +43,7 @@ class Recommender:
         
         try:
             # Use the Recommender directly
-            gdf = self.recommender.recommend(query, filters, top_n)
+            gdf = self.recommender.recommend(query, filters, top_n, weights)
             
             # Convert to serializable format
             top_results = self._serialize_gdf(gdf)
