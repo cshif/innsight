@@ -454,3 +454,75 @@ class TestRecommendAPI:
         data = response.json()
         assert data["error"] == "Parse Error"
         assert "Request validation failed" in data["message"]
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_external_dependency_failure_returns_503(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that external dependency failures return HTTP 503."""
+        from src.innsight.exceptions import GeocodeError
+        
+        # Arrange
+        mock_recommender = Mock()
+        mock_recommender.recommend.side_effect = GeocodeError("Geocoding service is down")
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "test query"
+        })
+        
+        # Assert
+        assert response.status_code == 503
+        data = response.json()
+        assert data["error"] == "Service Unavailable"
+        assert "External service unavailable" in data["message"]
+        assert "Geocoding service is down" in data["message"]
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')  
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_network_error_returns_503(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that network errors return HTTP 503."""
+        from src.innsight.exceptions import NetworkError
+        
+        # Arrange
+        mock_recommender = Mock()
+        mock_recommender.recommend.side_effect = NetworkError("Network connection failed")
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "test query"
+        })
+        
+        # Assert
+        assert response.status_code == 503
+        data = response.json()
+        assert data["error"] == "Service Unavailable"
+        assert "External service unavailable" in data["message"]
+        assert "Network connection failed" in data["message"]
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_api_error_returns_503(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that API errors return HTTP 503."""
+        from src.innsight.exceptions import APIError
+        
+        # Arrange
+        mock_recommender = Mock()
+        mock_recommender.recommend.side_effect = APIError("External API returned 500", status_code=500)
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "test query"
+        })
+        
+        # Assert
+        assert response.status_code == 503
+        data = response.json()
+        assert data["error"] == "Service Unavailable"
+        assert "External service unavailable" in data["message"]
+        assert "External API returned 500" in data["message"]

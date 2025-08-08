@@ -4,6 +4,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
+from .exceptions import ServiceUnavailableError
+
 class WeightsModel(BaseModel):
     rating: Optional[float] = 1.0
     tier: Optional[float] = 1.0
@@ -43,6 +45,16 @@ def create_app() -> FastAPI:
             content={
                 "error": "Parse Error",
                 "message": f"Request validation failed: {str(exc)}"
+            }
+        )
+
+    @app.exception_handler(ServiceUnavailableError)
+    async def service_unavailable_exception_handler(request, exc):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "Service Unavailable",
+                "message": str(exc)
             }
         )
 

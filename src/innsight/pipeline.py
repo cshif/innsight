@@ -6,6 +6,7 @@ import geopandas as gpd
 from .config import AppConfig
 from .services.accommodation_search_service import AccommodationSearchService
 from .recommender import Recommender as RecommenderCore
+from .exceptions import NetworkError, APIError, GeocodeError, IsochroneError, ServiceUnavailableError
 
 
 class Recommender:
@@ -56,8 +57,11 @@ class Recommender:
                 "top": top_results
             }
             
+        except (NetworkError, APIError, GeocodeError, IsochroneError) as e:
+            # External dependency failures should be re-raised as ServiceUnavailableError
+            raise ServiceUnavailableError(f"External service unavailable: {str(e)}")
         except Exception as e:
-            # Return empty results for exceptions instead of error
+            # Other exceptions return empty results
             return {
                 "stats": {"tier_0": 0, "tier_1": 0, "tier_2": 0, "tier_3": 0},
                 "top": []

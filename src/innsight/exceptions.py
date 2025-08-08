@@ -58,3 +58,8 @@ class TierError(InnsightError):
 class NoAccommodationError(InnsightError):
     """Raised when no accommodations match the specified criteria."""
     pass
+
+
+class ServiceUnavailableError(InnsightError):
+    """Raised when external dependencies are not available."""
+    pass
