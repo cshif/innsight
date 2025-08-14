@@ -74,7 +74,7 @@ class Recommender:
         
         return [
             {
-                "name": row.get("name"),
+                "name": row.get("name", "Unknown"),
                 "score": float(row.get("score", 0)) if row.get("score") is not None else 0.0,
                 "tier": int(row.get("tier", 0)) if row.get("tier") is not None else 0,
                 "lat": float(row.get("lat")) if row.get("lat") is not None else None,

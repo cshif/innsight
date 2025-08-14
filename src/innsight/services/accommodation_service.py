@@ -59,7 +59,7 @@ class AccommodationService:
                 "lat": lat_el,
                 "lon": lon_el,
                 "tourism": tags.get("tourism"),
-                "name": tags.get("name"),
+                "name": tags.get("name", "Unknown"),
                 "rating": self._extract_rating(tags),
                 "tags": self._extract_amenity_tags(tags),
             }
