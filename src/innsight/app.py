@@ -21,6 +21,13 @@ class AccommodationModel(BaseModel):
     name: str
     score: float = Field(ge=0, le=100)
     tier: int = Field(ge=0, le=3)
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    osmid: Optional[str] = None
+    osmtype: Optional[str] = None
+    tourism: Optional[str] = None
+    rating: Optional[float] = None
+    amenities: Optional[dict] = None
 
 class StatsModel(BaseModel):
     tier_0: int = 0
@@ -28,9 +35,19 @@ class StatsModel(BaseModel):
     tier_2: int = 0
     tier_3: int = 0
 
+class MainPoiModel(BaseModel):
+    name: str
+    location: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    display_name: Optional[str] = None
+    type: Optional[str] = None
+    address: Optional[dict] = None
+
 class RecommendResponse(BaseModel):
     stats: StatsModel
     top: List[AccommodationModel]
+    main_poi: MainPoiModel
 
 class ErrorResponse(BaseModel):
     error: str

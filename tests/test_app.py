@@ -131,7 +131,27 @@ class TestDependencyInjection:
         # Create a fake recommender that returns a known response
         fake_response = {
             "stats": {"tier_0": 0, "tier_1": 1, "tier_2": 0, "tier_3": 0},
-            "top": [{"name": "Fake Hotel", "score": 99.9, "tier": 1}]
+            "top": [{
+                "name": "Fake Hotel", 
+                "score": 99.9, 
+                "tier": 1,
+                "lat": None,
+                "lon": None,
+                "osmid": None,
+                "osmtype": None,
+                "tourism": None,
+                "rating": None,
+                "amenities": None
+            }],
+            "main_poi": {
+                "name": "測試景點", 
+                "location": "測試地點",
+                "lat": None,
+                "lon": None,
+                "display_name": None,
+                "type": None,
+                "address": None
+            }
         }
         
         def fake_recommender():
@@ -213,7 +233,27 @@ class TestDependencyInjection:
             fake_recommender = Mock()
             fake_response = {
                 "stats": {"tier_0": 0, "tier_1": 1, "tier_2": 0, "tier_3": 0},
-                "top": [{"name": "Patched Hotel", "score": 88.8, "tier": 1}]
+                "top": [{
+                    "name": "Patched Hotel", 
+                    "score": 88.8, 
+                    "tier": 1,
+                    "lat": None,
+                    "lon": None,
+                    "osmid": None,
+                    "osmtype": None,
+                    "tourism": None,
+                    "rating": None,
+                    "amenities": None
+                }],
+                "main_poi": {
+                    "name": "測試景點", 
+                    "location": "測試地點",
+                    "lat": None,
+                    "lon": None,
+                    "display_name": None,
+                    "type": None,
+                    "address": None
+                }
             }
             fake_recommender.run.return_value = fake_response
             mock_recommender_class.return_value = fake_recommender

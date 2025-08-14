@@ -58,6 +58,33 @@ class AccommodationSearchService:
         
         return gdf
     
+    def search_accommodations_by_coordinates(self, lat: float, lon: float, weights: Optional[Dict[str, float]] = None) -> gpd.GeoDataFrame:
+        """Search for accommodations based on specific coordinates."""
+        # Fetch accommodations directly using provided coordinates
+        df = self.accommodation_service.fetch_accommodations(lat, lon)
+        
+        if len(df) == 0:
+            return gpd.GeoDataFrame()
+        
+        # Get isochrones
+        coord = (float(lon), float(lat))
+        intervals = self.config.default_isochrone_intervals
+        isochrones_list = self.isochrone_service.get_isochrones_with_fallback(coord, intervals)
+        
+        if isochrones_list is None:
+            return gpd.GeoDataFrame()
+        
+        # Assign tiers
+        gdf = self.tier_service.assign_tiers(df, isochrones_list)
+        
+        # Calculate scores with custom weights if provided
+        gdf['score'] = gdf.apply(lambda row: self.rating_service.score(row, weights), axis=1)
+        
+        # Sort by score in descending order
+        gdf = self.sort_accommodations(gdf)
+        
+        return gdf
+    
     def filter_accommodations(self, accommodations_df: gpd.GeoDataFrame, user_conditions: dict) -> gpd.GeoDataFrame:
         """Filter accommodations based on user conditions."""
         if not user_conditions:
