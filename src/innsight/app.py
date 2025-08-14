@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
@@ -36,7 +37,16 @@ class ErrorResponse(BaseModel):
     message: str
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="InnSight API")
+    app = FastAPI(title="InnSight API", root_path="/api")
+
+    # Add CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # In production, specify your frontend domain
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request, exc):
