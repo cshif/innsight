@@ -764,3 +764,55 @@ class TestRecommendAPI:
         
         # Performance requirement even with maximum load
         assert response_time_ms < 300, f"Response time {response_time_ms:.2f}ms exceeds 300ms requirement even with max results"
+    
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_isochrone_geometry(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend API returns isochrone geometry data."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+        
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+        
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+        
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Check that response includes isochrone geometry data
+        assert "isochrone_geometry" in data
+        assert "intervals" in data
+        
+        # Check isochrone geometry format (should be GeoJSON)
+        isochrone_geometry = data["isochrone_geometry"]
+        assert isinstance(isochrone_geometry, list)
+        
+        if len(isochrone_geometry) > 0:
+            # Each isochrone should be a GeoJSON Polygon
+            for geom in isochrone_geometry:
+                assert "type" in geom
+                assert geom["type"] in ["Polygon", "MultiPolygon"]
+                assert "coordinates" in geom
+                
+        # Check intervals format
+        intervals = data["intervals"]
+        assert "values" in intervals
+        assert "unit" in intervals
+        assert "profile" in intervals
+        assert isinstance(intervals["values"], list)
+        assert intervals["unit"] == "minutes"
+        assert intervals["profile"] == "driving-car"

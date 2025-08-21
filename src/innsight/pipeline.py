@@ -3,10 +3,12 @@
 from typing import Dict, List, Any, Optional
 import geopandas as gpd
 import math
+from shapely.geometry import Polygon
 
 from .config import AppConfig
 from .services.accommodation_search_service import AccommodationSearchService
 from .services.geocode_service import GeocodeService
+from .services.isochrone_service import IsochroneService
 from .recommender import Recommender as RecommenderCore
 from .exceptions import NetworkError, APIError, GeocodeError, IsochroneError, ServiceUnavailableError
 from .parser import parse_query, extract_location_from_query
@@ -20,6 +22,8 @@ class Recommender:
         config = AppConfig.from_env()
         search_service = AccommodationSearchService(config)
         self.geocode_service = GeocodeService(config)
+        self.isochrone_service = IsochroneService(config)
+        self.config = config
         self.recommender = RecommenderCore(search_service)
     
     def run(self, query_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -44,7 +48,9 @@ class Recommender:
             return {
                 "stats": {"tier_0": 0, "tier_1": 0, "tier_2": 0, "tier_3": 0},
                 "top": [],
-                "main_poi": self._build_main_poi_data("未知景點", None, None)
+                "main_poi": self._build_main_poi_data("未知景點", None, None),
+                "isochrone_geometry": [],
+                "intervals": {"values": [], "unit": "minutes", "profile": "driving-car"}
             }
         
         # Parse query to extract main POI information (只解析一次)
@@ -101,10 +107,29 @@ class Recommender:
             # Calculate tier statistics
             stats = self._calculate_tier_stats(gdf)
             
+            # Get isochrone geometry data
+            isochrone_geometry = []
+            intervals_data = {"values": [], "unit": "minutes", "profile": "driving-car"}
+            
+            if main_poi_lat is not None and main_poi_lon is not None:
+                coord = (float(main_poi_lon), float(main_poi_lat))
+                intervals = self.config.default_isochrone_intervals
+                isochrones_list = self.isochrone_service.get_isochrones_with_fallback(coord, intervals)
+                
+                if isochrones_list:
+                    isochrone_geometry = self._convert_isochrones_to_geojson(isochrones_list)
+                    intervals_data = {
+                        "values": intervals,
+                        "unit": "minutes", 
+                        "profile": "driving-car"
+                    }
+            
             return {
                 "stats": stats,
                 "top": top_results,
-                "main_poi": self._build_main_poi_data(main_poi_name, location, poi_details)
+                "main_poi": self._build_main_poi_data(main_poi_name, location, poi_details),
+                "isochrone_geometry": isochrone_geometry,
+                "intervals": intervals_data
             }
             
         except (NetworkError, APIError, GeocodeError, IsochroneError) as e:
@@ -115,7 +140,9 @@ class Recommender:
             return {
                 "stats": {"tier_0": 0, "tier_1": 0, "tier_2": 0, "tier_3": 0},
                 "top": [],
-                "main_poi": self._build_main_poi_data(main_poi_name, location, poi_details)
+                "main_poi": self._build_main_poi_data(main_poi_name, location, poi_details),
+                "isochrone_geometry": [],
+                "intervals": {"values": [], "unit": "minutes", "profile": "driving-car"}
             }
     
     def _serialize_gdf(self, gdf: gpd.GeoDataFrame) -> List[Dict[str, Any]]:
@@ -248,3 +275,35 @@ class Recommender:
                     return keyword
         
         return None
+    
+    def _convert_isochrones_to_geojson(self, isochrones_list: List[List[Polygon]]) -> List[Dict[str, Any]]:
+        """Convert isochrone polygons to GeoJSON format."""
+        geojson_geometries = []
+        
+        for isochrone_group in isochrones_list:
+            if not isochrone_group:
+                continue
+                
+            if len(isochrone_group) == 1:
+                # Single polygon
+                polygon = isochrone_group[0]
+                if isinstance(polygon, Polygon):
+                    coords = [list(polygon.exterior.coords)]
+                    geojson_geometries.append({
+                        "type": "Polygon",
+                        "coordinates": coords
+                    })
+            else:
+                # Multiple polygons - use MultiPolygon
+                all_coords = []
+                for polygon in isochrone_group:
+                    if isinstance(polygon, Polygon):
+                        all_coords.append([list(polygon.exterior.coords)])
+                
+                if all_coords:
+                    geojson_geometries.append({
+                        "type": "MultiPolygon", 
+                        "coordinates": all_coords
+                    })
+        
+        return geojson_geometries

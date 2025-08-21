@@ -151,7 +151,9 @@ class TestDependencyInjection:
                 "display_name": None,
                 "type": None,
                 "address": None
-            }
+            },
+            "isochrone_geometry": [],
+            "intervals": {"values": [], "unit": "minutes", "profile": "driving-car"}
         }
         
         def fake_recommender():
@@ -253,7 +255,9 @@ class TestDependencyInjection:
                     "display_name": None,
                     "type": None,
                     "address": None
-                }
+                },
+                "isochrone_geometry": [],
+                "intervals": {"values": [], "unit": "minutes", "profile": "driving-car"}
             }
             fake_recommender.run.return_value = fake_response
             mock_recommender_class.return_value = fake_recommender

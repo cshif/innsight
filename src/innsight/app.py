@@ -3,7 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Literal, Union, Tuple
 
 from .exceptions import ServiceUnavailableError
 
@@ -44,10 +44,33 @@ class MainPoiModel(BaseModel):
     type: Optional[str] = None
     address: Optional[dict] = None
 
+class IntervalsModel(BaseModel):
+    values: List[int]
+    unit: str = "minutes"
+    profile: str = "driving-car"
+
+class PolygonGeometry(BaseModel):
+    """GeoJSON Polygon 幾何體"""
+    type: Literal["Polygon"] = "Polygon"
+    coordinates: List[List[Tuple[float, float]]]  # [[(lon, lat), (lon, lat), ...]]
+
+class MultiPolygonGeometry(BaseModel):
+    """GeoJSON MultiPolygon 幾何體"""
+    type: Literal["MultiPolygon"] = "MultiPolygon"  
+    coordinates: List[List[List[Tuple[float, float]]]]  # [[[[(lon, lat), (lon, lat), ...]], [...]]]
+
+# Union 讓 API 支援兩種格式
+IsochroneGeometry = Union[PolygonGeometry, MultiPolygonGeometry]
+
 class RecommendResponse(BaseModel):
     stats: StatsModel
     top: List[AccommodationModel]
     main_poi: MainPoiModel
+    isochrone_geometry: List[IsochroneGeometry] = Field(
+        default_factory=list,
+        description="Travel time isochrones in GeoJSON format"
+    )
+    intervals: IntervalsModel = Field(default_factory=lambda: IntervalsModel(values=[]))
 
 class ErrorResponse(BaseModel):
     error: str
