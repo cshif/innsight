@@ -58,6 +58,7 @@ class Recommender:
             parsed_query = parse_query(query)
             location = extract_location_from_query(parsed_query, query)
             poi = parsed_query.get('poi', '')
+            parsed_filters = parsed_query.get('filters', [])
             
             # Determine the main POI name and search term
             if poi:
@@ -89,17 +90,21 @@ class Recommender:
             poi_details = None
             main_poi_lat = None
             main_poi_lon = None
+            parsed_filters = []
+        
+        # Merge parsed filters with API-provided filters
+        merged_filters = self._merge_filters(parsed_filters, filters)
         
         # Search for accommodations
         try:
             # If we have main POI coordinates, use them for accommodation search
             if main_poi_lat is not None and main_poi_lon is not None:
                 gdf = self.recommender.recommend_by_coordinates(
-                    main_poi_lat, main_poi_lon, filters, top_n, weights
+                    main_poi_lat, main_poi_lon, merged_filters, top_n, weights
                 )
             else:
                 # Fallback to original query-based search
-                gdf = self.recommender.recommend(query, filters, top_n, weights)
+                gdf = self.recommender.recommend(query, merged_filters, top_n, weights)
             
             # Convert to serializable format
             top_results = self._serialize_gdf(gdf)
@@ -144,6 +149,34 @@ class Recommender:
                 "isochrone_geometry": [],
                 "intervals": {"values": [], "unit": "minutes", "profile": "driving-car"}
             }
+    
+    def _merge_filters(self, parsed_filters: List[str], api_filters: Optional[List[str]]) -> List[str]:
+        """Merge parsed filters with API-provided filters and remove duplicates.
+        
+        Args:
+            parsed_filters: Filters extracted from query text
+            api_filters: Filters provided via API parameters
+            
+        Returns:
+            List of unique filter strings
+        """
+        # Handle None values
+        if parsed_filters is None:
+            parsed_filters = []
+        if api_filters is None:
+            api_filters = []
+            
+        # Combine both lists and remove duplicates while preserving order
+        combined = parsed_filters + api_filters
+        unique_filters = []
+        seen = set()
+        
+        for filter_item in combined:
+            if filter_item not in seen:
+                unique_filters.append(filter_item)
+                seen.add(filter_item)
+                
+        return unique_filters
     
     def _serialize_gdf(self, gdf: gpd.GeoDataFrame) -> List[Dict[str, Any]]:
         """Convert GeoDataFrame to JSON-serializable format."""

@@ -402,8 +402,8 @@ class TestRecommendAPI:
         assert first_hotel["score"] == 85.0
         assert first_hotel["tier"] == 1
         
-        # Verify default parameters were used (note: now includes weights parameter)
-        mock_recommender.recommend.assert_called_once_with("台北101", None, 20, None)
+        # Verify default parameters were used (filters now merged as empty list)
+        mock_recommender.recommend.assert_called_once_with("台北101", [], 20, None)
     
     def test_recommend_invalid_json(self):
         """Test recommendation with invalid JSON."""
@@ -628,8 +628,8 @@ class TestRecommendAPI:
         # Assert
         assert response.status_code == 200
         
-        # Verify default top_n=20 was passed to recommender
-        mock_recommender.recommend.assert_called_once_with("test query", None, 20, None)
+        # Verify default top_n=20 was passed to recommender (filters now merged as empty list)
+        mock_recommender.recommend.assert_called_once_with("test query", [], 20, None)
     
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
