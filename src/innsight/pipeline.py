@@ -1,8 +1,13 @@
 """Pipeline for FastAPI integration with Recommender."""
 
 from typing import Dict, List, Any, Optional
+import copy
 import geopandas as gpd
+import hashlib
+import json
+import logging
 import math
+import time
 from shapely.geometry import Polygon
 
 from .config import AppConfig
@@ -25,6 +30,28 @@ class Recommender:
         self.isochrone_service = IsochroneService(config)
         self.config = config
         self.recommender = RecommenderCore(search_service)
+
+        # Recommendation result cache
+        self._cache: Dict[str, tuple] = {}  # {cache_key: (result, timestamp)}
+        self._cache_ttl: int = config.recommender_cache_ttl_seconds
+        self._cache_max_size: int = config.recommender_cache_maxsize
+        self._cleanup_interval: int = config.recommender_cache_cleanup_interval
+        self._last_cleanup_time: float = 0
+
+        # Cache statistics (for monitoring)
+        self._cache_hits: int = 0
+        self._cache_misses: int = 0
+        self._parsing_failures: int = 0
+
+        # Log cache configuration on initialization
+        logging.info(
+            "Cache initialized - Max size: %d, TTL: %d seconds (%.1f minutes), "
+            "Cleanup interval: %d seconds",
+            self._cache_max_size,
+            self._cache_ttl,
+            self._cache_ttl / 60,
+            self._cleanup_interval
+        )
     
     def run(self, query_data: Dict[str, Any]) -> Dict[str, Any]:
         """Run the recommendation pipeline.
@@ -91,9 +118,25 @@ class Recommender:
             main_poi_lat = None
             main_poi_lon = None
             parsed_filters = []
-        
+            poi = ""  # Ensure poi is defined for cache key check
+            self._parsing_failures += 1
+
         # Merge parsed filters with API-provided filters
         merged_filters = self._merge_filters(parsed_filters, filters)
+
+        # Check cache only if parsing succeeded (has poi or location)
+        cache_key = None
+        if poi or location:
+            cache_key = self._build_cache_key(
+                poi=poi,
+                place=location,
+                filters=merged_filters,
+                weights=weights,
+                profile='driving-car'
+            )
+            cached_result = self._get_from_cache(cache_key, top_n)
+            if cached_result is not None:
+                return cached_result
         
         # Search for accommodations
         try:
@@ -129,13 +172,20 @@ class Recommender:
                         "profile": "driving-car"
                     }
             
-            return {
+            # Build result
+            result = {
                 "stats": stats,
                 "top": top_results,
                 "main_poi": self._build_main_poi_data(main_poi_name, location, poi_details),
                 "isochrone_geometry": isochrone_geometry,
                 "intervals": intervals_data
             }
+
+            # Save to cache if parsing succeeded
+            if cache_key is not None:
+                self._save_to_cache(cache_key, result)
+
+            return result
             
         except (NetworkError, APIError, GeocodeError, IsochroneError) as e:
             # External dependency failures should be re-raised as ServiceUnavailableError
@@ -335,8 +385,145 @@ class Recommender:
                 
                 if all_coords:
                     geojson_geometries.append({
-                        "type": "MultiPolygon", 
+                        "type": "MultiPolygon",
                         "coordinates": all_coords
                     })
         
         return geojson_geometries
+
+    def _build_cache_key(self, poi: str, place: Optional[str], filters: List[str],
+                         weights: Optional[dict], profile: str) -> str:
+        """Build cache key from parsed query parameters.
+
+        Args:
+            poi: Main point of interest
+            place: Location/region
+            filters: List of filter categories
+            weights: Score weights
+            profile: Transportation profile
+
+        Returns:
+            MD5 hash of the parameters
+        """
+        cache_data = {
+            'poi': poi or "",
+            'place': place or "",
+            'filters': sorted(filters) if filters else [],
+            'weights': weights,
+            'profile': profile
+        }
+        return hashlib.md5(json.dumps(cache_data, sort_keys=True).encode()).hexdigest()
+
+    def _get_from_cache(self, cache_key: str, top_n: int) -> Optional[Dict[str, Any]]:
+        """Retrieve result from cache if valid.
+
+        Args:
+            cache_key: Cache key to lookup
+            top_n: Number of results to return
+
+        Returns:
+            Cached result with top_n slicing, or None if cache miss/expired
+        """
+        # Trigger periodic cleanup
+        self._cleanup_cache()
+
+        if cache_key not in self._cache:
+            self._cache_misses += 1
+            return None
+
+        result, timestamp = self._cache[cache_key]
+
+        # Check if cache is expired
+        if time.time() - timestamp > self._cache_ttl:
+            del self._cache[cache_key]
+            self._cache_misses += 1
+            return None
+
+        # Cache hit - increment counter and return result
+        self._cache_hits += 1
+
+        # Log cache hit at debug level
+        logging.debug("Cache hit for key: %s", cache_key[:8])
+
+        # Return cached result with top_n slicing (deep copy to avoid mutation)
+        result_copy = {
+            'stats': result['stats'],
+            'top': result['top'][:top_n],  # Slice to requested top_n
+            'main_poi': result['main_poi'],
+            'isochrone_geometry': result['isochrone_geometry'],
+            'intervals': result['intervals']
+        }
+        return result_copy
+
+    def _save_to_cache(self, cache_key: str, result: Dict[str, Any]) -> None:
+        """Save result to cache with current timestamp.
+
+        Args:
+            cache_key: Cache key
+            result: Result dictionary to cache (will be deep copied)
+        """
+        # Deep copy to prevent external mutations from affecting cache
+        result_copy = copy.deepcopy(result)
+        self._cache[cache_key] = (result_copy, time.time())
+
+    def _cleanup_cache(self) -> None:
+        """Clean up expired and excess cache entries (throttled).
+
+        Cleanup is throttled to run at most once per cleanup_interval (default 60s).
+        This prevents excessive cleanup operations on high-frequency requests.
+
+        Cleanup strategy:
+        1. Remove all expired entries (older than TTL)
+        2. If cache still exceeds max size, remove oldest entries (LRU)
+        """
+        current_time = time.time()
+
+        # Throttle: skip if cleaned up recently
+        if current_time - self._last_cleanup_time < self._cleanup_interval:
+            return
+
+        self._last_cleanup_time = current_time
+
+        # Step 1: Remove all expired entries
+        expired_keys = [
+            key for key, (_, timestamp) in self._cache.items()
+            if current_time - timestamp > self._cache_ttl
+        ]
+
+        for key in expired_keys:
+            del self._cache[key]
+
+        # Step 2: If still over max size, remove oldest entries (LRU)
+        num_evicted = 0
+        if len(self._cache) > self._cache_max_size:
+            # Sort by timestamp (oldest first)
+            sorted_items = sorted(
+                self._cache.items(),
+                key=lambda item: item[1][1]  # item[1][1] is timestamp
+            )
+
+            # Calculate how many to remove
+            num_to_remove = len(self._cache) - self._cache_max_size
+
+            # Remove oldest entries
+            for key, _ in sorted_items[:num_to_remove]:
+                del self._cache[key]
+
+            num_evicted = num_to_remove
+
+        # Log cache statistics after cleanup
+        total_requests = self._cache_hits + self._cache_misses
+        hit_rate = (self._cache_hits / total_requests * 100) if total_requests > 0 else 0
+
+        logging.info(
+            "Cache stats - Size: %d/%d, Hits: %d, Misses: %d, Hit rate: %.1f%%, "
+            "Parsing failures: %d, Expired: %d, Evicted: %d",
+            len(self._cache),
+            self._cache_max_size,
+            self._cache_hits,
+            self._cache_misses,
+            hit_rate,
+            self._parsing_failures,
+            len(expired_keys),
+            num_evicted
+        )

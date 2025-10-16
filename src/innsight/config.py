@@ -27,6 +27,11 @@ class AppConfig:
     # Cache Settings
     cache_maxsize: int = 128
     cache_ttl_hours: int = 24
+
+    # Recommender Cache Settings
+    recommender_cache_maxsize: int = 20
+    recommender_cache_ttl_seconds: int = 1800  # 30 minutes
+    recommender_cache_cleanup_interval: int = 60  # Cleanup throttle in seconds
     
     # Retry Settings
     max_retry_attempts: int = 3
