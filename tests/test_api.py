@@ -980,3 +980,150 @@ class TestHTTPCaching:
         assert etag1 is not None
         assert etag2 is not None
         assert etag1 != etag2
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_with_if_none_match_returns_304_when_etag_matches(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend returns 304 Not Modified when If-None-Match matches current ETag."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act - First request to get the ETag
+        response1 = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        assert response1.status_code == 200
+        etag = response1.headers.get("etag")
+        assert etag is not None
+
+        # Act - Second request with If-None-Match header
+        response2 = self.client.post("/recommend",
+            json={"query": "台北101附近住宿"},
+            headers={"If-None-Match": etag}
+        )
+
+        # Assert
+        assert response2.status_code == 304
+        assert response2.content == b""  # No body for 304 response
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_with_if_none_match_returns_200_when_etag_differs(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend returns 200 with full body when If-None-Match does not match current ETag."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act - Request with a different/old ETag
+        old_etag = '"different-etag-value"'
+        response = self.client.post("/recommend",
+            json={"query": "台北101附近住宿"},
+            headers={"If-None-Match": old_etag}
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should return full body
+        assert "stats" in data
+        assert "top" in data
+        assert len(data["top"]) == 1
+        assert data["top"][0]["name"] == "Hotel A"
+
+        # Should have ETag header and it should be different from the old one
+        new_etag = response.headers.get("etag")
+        assert new_etag is not None
+        assert new_etag != old_etag
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_with_multiple_etags_in_if_none_match(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend handles multiple ETags in If-None-Match header (comma-separated)."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act - First request to get the current ETag
+        response1 = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        assert response1.status_code == 200
+        current_etag = response1.headers.get("etag")
+        assert current_etag is not None
+
+        # Act - Second request with multiple ETags (including the current one)
+        multiple_etags = f'"old-etag-1", "old-etag-2", {current_etag}, "old-etag-3"'
+        response2 = self.client.post("/recommend",
+            json={"query": "台北101附近住宿"},
+            headers={"If-None-Match": multiple_etags}
+        )
+
+        # Assert - Should return 304 because one of the ETags matches
+        assert response2.status_code == 304
+        assert response2.content == b""
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_with_if_none_match_wildcard(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend returns 304 when If-None-Match is * (wildcard)."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act - Request with wildcard If-None-Match
+        response = self.client.post("/recommend",
+            json={"query": "台北101附近住宿"},
+            headers={"If-None-Match": "*"}
+        )
+
+        # Assert - Should return 304 because * matches any existing resource
+        assert response.status_code == 304
+        assert response.content == b""

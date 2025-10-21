@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Response
+from fastapi import FastAPI, Depends, Response, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -142,9 +142,9 @@ def create_app() -> FastAPI:
         return Recommender()
 
     @app.post("/recommend", response_model=RecommendResponse)
-    async def recommend(request: RecommendRequest, response: Response, r: Recommender = Depends(get_recommender)):
+    async def recommend(req: RecommendRequest, request: Request, response: Response, r: Recommender = Depends(get_recommender)):
         # Get recommendation result
-        result = r.run(request.model_dump())
+        result = r.run(req.model_dump())
 
         # Generate ETag from response content
         etag = _generate_etag(result)
@@ -152,6 +152,28 @@ def create_app() -> FastAPI:
         # Set HTTP caching headers
         response.headers["Cache-Control"] = "no-cache, must-revalidate"
         response.headers["ETag"] = etag
+
+        # Check If-None-Match header
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match:
+            should_return_304 = False
+
+            # Check for wildcard (matches any version)
+            if if_none_match.strip() == "*":
+                should_return_304 = True
+            else:
+                # Parse multiple ETags (comma-separated)
+                client_etags = [e.strip() for e in if_none_match.split(',')]
+                # Check if current ETag matches any of the client's ETags
+                if etag in client_etags:
+                    should_return_304 = True
+
+            if should_return_304:
+                # Return 304 Not Modified with no body
+                return Response(status_code=304, headers={
+                    "Cache-Control": "no-cache, must-revalidate",
+                    "ETag": etag
+                })
 
         return result
 
