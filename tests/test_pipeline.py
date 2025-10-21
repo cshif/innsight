@@ -13,18 +13,36 @@ class TestRecommenderPipeline:
 
     def setup_method(self):
         """Set up test fixtures before each test method."""
-        # Mock all external dependencies
-        with patch('src.innsight.pipeline.AppConfig.from_env') as mock_config, \
-             patch('src.innsight.pipeline.AccommodationSearchService') as mock_search_service, \
-             patch('src.innsight.pipeline.GeocodeService') as mock_geocode_service, \
-             patch('src.innsight.pipeline.IsochroneService') as mock_isochrone_service, \
-             patch('src.innsight.pipeline.RecommenderCore') as mock_recommender_core:
-            
-            # Set up mock config
-            mock_config.return_value = Mock()
-            
-            # Create the Recommender instance
-            self.recommender = Recommender()
+        # Start patches
+        self.config_patcher = patch('src.innsight.pipeline.AppConfig.from_env')
+        self.search_service_patcher = patch('src.innsight.pipeline.AccommodationSearchService')
+        self.geocode_service_patcher = patch('src.innsight.pipeline.GeocodeService')
+        self.isochrone_service_patcher = patch('src.innsight.pipeline.IsochroneService')
+        self.recommender_core_patcher = patch('src.innsight.pipeline.RecommenderCore')
+
+        self.mock_config = self.config_patcher.start()
+        self.mock_search_service = self.search_service_patcher.start()
+        self.mock_geocode_service = self.geocode_service_patcher.start()
+        self.mock_isochrone_service = self.isochrone_service_patcher.start()
+        self.mock_recommender_core = self.recommender_core_patcher.start()
+
+        # Set up mock config with actual values (not Mock objects)
+        mock_config_instance = Mock()
+        mock_config_instance.recommender_cache_ttl_seconds = 1800
+        mock_config_instance.recommender_cache_maxsize = 20
+        mock_config_instance.recommender_cache_cleanup_interval = 60
+        self.mock_config.return_value = mock_config_instance
+
+        # Create the Recommender instance
+        self.recommender = Recommender()
+
+    def teardown_method(self):
+        """Clean up patches after each test method."""
+        self.config_patcher.stop()
+        self.search_service_patcher.stop()
+        self.geocode_service_patcher.stop()
+        self.isochrone_service_patcher.stop()
+        self.recommender_core_patcher.stop()
 
     def test_merge_filters_with_parsed_and_api_filters(self):
         """Test merging parsed filters with API filters."""
