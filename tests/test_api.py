@@ -816,3 +816,43 @@ class TestRecommendAPI:
         assert isinstance(intervals["values"], list)
         assert intervals["unit"] == "minutes"
         assert intervals["profile"] == "driving-car"
+
+
+class TestHTTPCaching:
+    """Test suite for HTTP caching headers."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.app = create_app()
+        self.client = TestClient(self.app)
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_cache_control_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes Cache-Control: no-cache, must-revalidate header."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check Cache-Control header exists and has correct value
+        assert "cache-control" in response.headers
+        assert response.headers["cache-control"] == "no-cache, must-revalidate"

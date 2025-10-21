@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -121,7 +121,8 @@ def create_app() -> FastAPI:
         return Recommender()
 
     @app.post("/recommend", response_model=RecommendResponse)
-    async def recommend(request: RecommendRequest, r: Recommender = Depends(get_recommender)):
+    async def recommend(request: RecommendRequest, response: Response, r: Recommender = Depends(get_recommender)):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
         return r.run(request.model_dump())
 
     return app
