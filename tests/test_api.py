@@ -856,3 +856,127 @@ class TestHTTPCaching:
         # Check Cache-Control header exists and has correct value
         assert "cache-control" in response.headers
         assert response.headers["cache-control"] == "no-cache, must-revalidate"
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_etag_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes ETag header."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check ETag header exists
+        assert "etag" in response.headers
+
+        # Check ETag format (should be quoted hash string)
+        etag = response.headers["etag"]
+        assert etag.startswith('"')
+        assert etag.endswith('"')
+        assert len(etag) > 2  # More than just quotes
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_same_content_generates_same_etag(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that identical responses generate the same ETag."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act - Make two identical requests
+        response1 = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+        response2 = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+
+        # Both responses should have the same ETag
+        etag1 = response1.headers.get("etag")
+        etag2 = response2.headers.get("etag")
+
+        assert etag1 is not None
+        assert etag2 is not None
+        assert etag1 == etag2
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_different_content_generates_different_etag(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that different responses generate different ETags."""
+        # Arrange - Create two different response datasets
+        mock_gdf_1 = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_gdf_2 = gpd.GeoDataFrame({
+            'name': ['Hotel B'],
+            'score': [75.0],
+            'tier': [2],
+            'lat': [25.0340],
+            'lon': [121.5664],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        # First call returns Hotel A, second call returns Hotel B
+        mock_recommender.recommend.side_effect = [mock_gdf_1, mock_gdf_2]
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act - Make two requests with different results
+        response1 = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+        response2 = self.client.post("/recommend", json={
+            "query": "台北車站附近住宿"
+        })
+
+        # Assert
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+
+        # Different content should have different ETags
+        etag1 = response1.headers.get("etag")
+        etag2 = response2.headers.get("etag")
+
+        assert etag1 is not None
+        assert etag2 is not None
+        assert etag1 != etag2

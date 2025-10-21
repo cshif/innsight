@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Literal, Union, Tuple
 import logging
+import hashlib
+import json
 
 from .exceptions import ServiceUnavailableError
 
@@ -84,6 +86,25 @@ class ErrorResponse(BaseModel):
     error: str
     message: str
 
+def _generate_etag(content: dict) -> str:
+    """Generate ETag from response content.
+
+    Args:
+        content: Dictionary representing the response content
+
+    Returns:
+        ETag string in HTTP format (quoted hash)
+    """
+    # Serialize to JSON with sorted keys for consistency
+    json_str = json.dumps(content, sort_keys=True, ensure_ascii=False)
+
+    # Generate MD5 hash
+    hash_obj = hashlib.md5(json_str.encode('utf-8'))
+    hash_hex = hash_obj.hexdigest()
+
+    # Return in HTTP ETag format (quoted)
+    return f'"{hash_hex}"'
+
 def create_app() -> FastAPI:
     app = FastAPI(title="InnSight API", root_path="/api")
 
@@ -122,8 +143,17 @@ def create_app() -> FastAPI:
 
     @app.post("/recommend", response_model=RecommendResponse)
     async def recommend(request: RecommendRequest, response: Response, r: Recommender = Depends(get_recommender)):
+        # Get recommendation result
+        result = r.run(request.model_dump())
+
+        # Generate ETag from response content
+        etag = _generate_etag(result)
+
+        # Set HTTP caching headers
         response.headers["Cache-Control"] = "no-cache, must-revalidate"
-        return r.run(request.model_dump())
+        response.headers["ETag"] = etag
+
+        return result
 
     return app
 
