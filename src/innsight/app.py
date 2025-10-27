@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, Response, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Literal, Union, Tuple
 import logging
@@ -105,8 +106,22 @@ def _generate_etag(content: dict) -> str:
     # Return in HTTP ETag format (quoted)
     return f'"{hash_hex}"'
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware to add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        # Add X-Content-Type-Options header
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+        return response
+
 def create_app() -> FastAPI:
     app = FastAPI(title="InnSight API", root_path="/api")
+
+    # Add security headers middleware
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Add CORS middleware
     app.add_middleware(
