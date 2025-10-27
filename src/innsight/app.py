@@ -115,6 +115,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Add X-Content-Type-Options header
         response.headers["X-Content-Type-Options"] = "nosniff"
 
+        # Add X-Frame-Options header
+        response.headers["X-Frame-Options"] = "DENY"
+
         return response
 
 def create_app() -> FastAPI:
