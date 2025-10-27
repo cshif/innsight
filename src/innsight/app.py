@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any, Literal, Union, Tuple
 import logging
 import hashlib
 import json
+import os
 
 from .exceptions import ServiceUnavailableError
 
@@ -121,8 +122,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Add Referrer-Policy header
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        # Add Strict-Transport-Security header
-        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        # Add Strict-Transport-Security header (only in production)
+        env = os.getenv("ENV", "local")  # Default to "local" if not set
+        if env == "prod":
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
 
         # Add Content-Security-Policy header (strict API policy)
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"

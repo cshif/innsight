@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch
 import geopandas as gpd
 import time
+import os
 
 from src.innsight.app import create_app
 
@@ -1230,12 +1231,18 @@ class TestSecurityHeaders:
         assert "referrer-policy" in response.headers
         assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
+    @patch.dict('os.environ', {'ENV': 'prod'})
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_hsts_header(self, mock_recommender_class, mock_search_service_class, mock_config):
-        """Test that /recommend response includes Strict-Transport-Security header."""
+    def test_recommend_response_includes_hsts_header_in_production(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes Strict-Transport-Security header in production environment."""
         # Arrange
+        # Need to recreate app after environment change
+        from src.innsight.app import create_app
+        app = create_app()
+        client = TestClient(app)
+
         mock_gdf = gpd.GeoDataFrame({
             'name': ['Hotel A'],
             'score': [85.0],
@@ -1250,16 +1257,96 @@ class TestSecurityHeaders:
         mock_recommender_class.return_value = mock_recommender
 
         # Act
-        response = self.client.post("/recommend", json={
+        response = client.post("/recommend", json={
             "query": "台北101附近住宿"
         })
 
         # Assert
         assert response.status_code == 200
 
-        # Check Strict-Transport-Security header exists and has correct value
+        # Check Strict-Transport-Security header exists and has correct value in production
         assert "strict-transport-security" in response.headers
         assert response.headers["strict-transport-security"] == "max-age=63072000; includeSubDomains"
+
+    @patch.dict('os.environ', {'ENV': 'local'})
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_excludes_hsts_header_in_local(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response does not include Strict-Transport-Security header in local environment."""
+        # Arrange
+        # Need to recreate app after environment change
+        from src.innsight.app import create_app
+        app = create_app()
+        client = TestClient(app)
+
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check Strict-Transport-Security header does not exist in local environment
+        assert "strict-transport-security" not in response.headers
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_excludes_hsts_header_when_env_not_set(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response does not include Strict-Transport-Security header when ENV is not set (defaults to local)."""
+        # Arrange
+        # Ensure ENV is not set (default behavior)
+        import os
+        env_backup = os.environ.pop('ENV', None)
+
+        try:
+            # Need to recreate app without ENV
+            from src.innsight.app import create_app
+            app = create_app()
+            client = TestClient(app)
+
+            mock_gdf = gpd.GeoDataFrame({
+                'name': ['Hotel A'],
+                'score': [85.0],
+                'tier': [1],
+                'lat': [25.0330],
+                'lon': [121.5654],
+                'tags': [{}]
+            })
+
+            mock_recommender = Mock()
+            mock_recommender.recommend.return_value = mock_gdf
+            mock_recommender_class.return_value = mock_recommender
+
+            # Act
+            response = client.post("/recommend", json={
+                "query": "台北101附近住宿"
+            })
+
+            # Assert
+            assert response.status_code == 200
+
+            # Check Strict-Transport-Security header does not exist when ENV not set (defaults to local)
+            assert "strict-transport-security" not in response.headers
+        finally:
+            # Restore ENV if it was set
+            if env_backup is not None:
+                os.environ['ENV'] = env_backup
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
