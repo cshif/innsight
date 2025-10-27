@@ -121,6 +121,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Add Referrer-Policy header
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
+        # Add Strict-Transport-Security header
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+
+        # Add Content-Security-Policy header (strict API policy)
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+
         return response
 
 def create_app() -> FastAPI:

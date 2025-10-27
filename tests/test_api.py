@@ -1229,3 +1229,65 @@ class TestSecurityHeaders:
         # Check Referrer-Policy header exists and has correct value
         assert "referrer-policy" in response.headers
         assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_hsts_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes Strict-Transport-Security header."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check Strict-Transport-Security header exists and has correct value
+        assert "strict-transport-security" in response.headers
+        assert response.headers["strict-transport-security"] == "max-age=63072000; includeSubDomains"
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_csp_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes Content-Security-Policy header."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check Content-Security-Policy header exists and has correct value
+        assert "content-security-policy" in response.headers
+        assert response.headers["content-security-policy"] == "default-src 'none'; frame-ancestors 'none'"
