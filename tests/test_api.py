@@ -1198,3 +1198,34 @@ class TestSecurityHeaders:
         # Check X-Frame-Options header exists and has correct value
         assert "x-frame-options" in response.headers
         assert response.headers["x-frame-options"] == "DENY"
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_referrer_policy_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes Referrer-Policy: strict-origin-when-cross-origin header."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check Referrer-Policy header exists and has correct value
+        assert "referrer-policy" in response.headers
+        assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"

@@ -118,6 +118,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Add X-Frame-Options header
         response.headers["X-Frame-Options"] = "DENY"
 
+        # Add Referrer-Policy header
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
         return response
 
 def create_app() -> FastAPI:
