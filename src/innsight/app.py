@@ -127,6 +127,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Add Content-Security-Policy header (strict API policy)
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
 
+        # Add Permissions-Policy header (disable all browser features)
+        response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), ambient-light-sensor=()"
+
+        # Add Cross-Origin-Opener-Policy header
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+
+        # Add Cross-Origin-Resource-Policy header
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+
         return response
 
 def create_app() -> FastAPI:

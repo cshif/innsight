@@ -1291,3 +1291,97 @@ class TestSecurityHeaders:
         # Check Content-Security-Policy header exists and has correct value
         assert "content-security-policy" in response.headers
         assert response.headers["content-security-policy"] == "default-src 'none'; frame-ancestors 'none'"
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_permissions_policy_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes Permissions-Policy header."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check Permissions-Policy header exists and has correct value
+        assert "permissions-policy" in response.headers
+        expected_policy = "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), ambient-light-sensor=()"
+        assert response.headers["permissions-policy"] == expected_policy
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_coop_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes Cross-Origin-Opener-Policy header."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check Cross-Origin-Opener-Policy header exists and has correct value
+        assert "cross-origin-opener-policy" in response.headers
+        assert response.headers["cross-origin-opener-policy"] == "same-origin"
+
+    @patch('src.innsight.pipeline.AppConfig.from_env')
+    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.RecommenderCore')
+    def test_recommend_response_includes_corp_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+        """Test that /recommend response includes Cross-Origin-Resource-Policy header."""
+        # Arrange
+        mock_gdf = gpd.GeoDataFrame({
+            'name': ['Hotel A'],
+            'score': [85.0],
+            'tier': [1],
+            'lat': [25.0330],
+            'lon': [121.5654],
+            'tags': [{}]
+        })
+
+        mock_recommender = Mock()
+        mock_recommender.recommend.return_value = mock_gdf
+        mock_recommender_class.return_value = mock_recommender
+
+        # Act
+        response = self.client.post("/recommend", json={
+            "query": "台北101附近住宿"
+        })
+
+        # Assert
+        assert response.status_code == 200
+
+        # Check Cross-Origin-Resource-Policy header exists and has correct value
+        assert "cross-origin-resource-policy" in response.headers
+        assert response.headers["cross-origin-resource-policy"] == "same-origin"
