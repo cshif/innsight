@@ -9,6 +9,8 @@ import logging
 import hashlib
 import json
 import os
+from datetime import datetime, UTC
+import tomllib
 
 from .exceptions import ServiceUnavailableError
 
@@ -18,6 +20,20 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+
+# Read and cache version from pyproject.toml at module load time
+_VERSION: str = "unknown"
+try:
+    with open("pyproject.toml", "rb") as f:
+        pyproject = tomllib.load(f)
+        _VERSION = pyproject["project"]["version"]
+except Exception as e:
+    logging.warning(f"Failed to read version from pyproject.toml: {e}")
+
+
+def get_version() -> str:
+    """Get the application version."""
+    return _VERSION
 
 class WeightsModel(BaseModel):
     rating: Optional[float] = 1.0
@@ -179,6 +195,19 @@ def create_app() -> FastAPI:
     from .pipeline import Recommender
     def get_recommender() -> Recommender:
         return Recommender()
+
+    @app.get("/health")
+    async def health_check():
+        """Basic health check endpoint.
+
+        Returns the application health status, current timestamp, and version.
+        This endpoint is designed for liveness probes in Kubernetes/Docker environments.
+        """
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "version": get_version()
+        }
 
     @app.post("/recommend", response_model=RecommendResponse)
     async def recommend(req: RecommendRequest, request: Request, response: Response, r: Recommender = Depends(get_recommender)):
