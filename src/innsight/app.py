@@ -2,9 +2,6 @@ from fastapi import FastAPI, Depends, Response, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any, Literal, Union, Tuple
 import logging
 import hashlib
 import json
@@ -16,6 +13,12 @@ import asyncio
 
 from .exceptions import ServiceUnavailableError
 from . import health
+from .models import (
+    RecommendRequest,
+    RecommendResponse,
+    ErrorResponse
+)
+from .middleware import SecurityHeadersMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -41,74 +44,6 @@ def get_version() -> str:
     """Get the application version."""
     return _VERSION
 
-class WeightsModel(BaseModel):
-    rating: Optional[float] = 1.0
-    tier: Optional[float] = 1.0
-
-class RecommendRequest(BaseModel):
-    query: str = Field(..., description="Search query for accommodations")
-    weights: Optional[WeightsModel] = None
-    top_n: Optional[int] = Field(default=20, ge=1, le=20, description="Maximum number of results (1-20)")
-    filters: Optional[List[str]] = None
-
-class AccommodationModel(BaseModel):
-    name: str
-    score: float = Field(ge=0, le=100)
-    tier: int = Field(ge=0, le=3)
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    osmid: Optional[str] = None
-    osmtype: Optional[str] = None
-    tourism: Optional[str] = None
-    rating: Optional[float] = None
-    amenities: Optional[dict] = None
-
-class StatsModel(BaseModel):
-    tier_0: int = 0
-    tier_1: int = 0  
-    tier_2: int = 0
-    tier_3: int = 0
-
-class MainPoiModel(BaseModel):
-    name: str
-    location: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    display_name: Optional[str] = None
-    type: Optional[str] = None
-    address: Optional[dict] = None
-
-class IntervalsModel(BaseModel):
-    values: List[int]
-    unit: str = "minutes"
-    profile: str = "driving-car"
-
-class PolygonGeometry(BaseModel):
-    """GeoJSON Polygon 幾何體"""
-    type: Literal["Polygon"] = "Polygon"
-    coordinates: List[List[Tuple[float, float]]]  # [[(lon, lat), (lon, lat), ...]]
-
-class MultiPolygonGeometry(BaseModel):
-    """GeoJSON MultiPolygon 幾何體"""
-    type: Literal["MultiPolygon"] = "MultiPolygon"  
-    coordinates: List[List[List[Tuple[float, float]]]]  # [[[[(lon, lat), (lon, lat), ...]], [...]]]
-
-# Union 讓 API 支援兩種格式
-IsochroneGeometry = Union[PolygonGeometry, MultiPolygonGeometry]
-
-class RecommendResponse(BaseModel):
-    stats: StatsModel
-    top: List[AccommodationModel]
-    main_poi: MainPoiModel
-    isochrone_geometry: List[IsochroneGeometry] = Field(
-        default_factory=list,
-        description="Travel time isochrones in GeoJSON format"
-    )
-    intervals: IntervalsModel = Field(default_factory=lambda: IntervalsModel(values=[]))
-
-class ErrorResponse(BaseModel):
-    error: str
-    message: str
 
 def _generate_etag(content: dict) -> str:
     """Generate ETag from response content.
@@ -129,39 +64,6 @@ def _generate_etag(content: dict) -> str:
     # Return in HTTP ETag format (quoted)
     return f'"{hash_hex}"'
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Middleware to add security headers to all responses."""
-
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-
-        # Add X-Content-Type-Options header
-        response.headers["X-Content-Type-Options"] = "nosniff"
-
-        # Add X-Frame-Options header
-        response.headers["X-Frame-Options"] = "DENY"
-
-        # Add Referrer-Policy header
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-
-        # Add Strict-Transport-Security header (only in production)
-        env = os.getenv("ENV", "local")  # Default to "local" if not set
-        if env == "prod":
-            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
-
-        # Add Content-Security-Policy header (strict API policy)
-        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
-
-        # Add Permissions-Policy header (disable all browser features)
-        response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), ambient-light-sensor=()"
-
-        # Add Cross-Origin-Opener-Policy header
-        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
-
-        # Add Cross-Origin-Resource-Policy header
-        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
-
-        return response
 
 def create_app() -> FastAPI:
     app = FastAPI(title="InnSight API", root_path="/api")
