@@ -387,3 +387,196 @@ class TestReadyEndpoint:
             datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         except ValueError:
             assert False, f"Invalid ISO 8601 timestamp: {timestamp}"
+
+
+class TestStatusEndpoint:
+    """Test suite for /api/status endpoint."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.app = create_app()
+        self.client = TestClient(self.app)
+
+    @patch('src.innsight.health.get_cache_stats')
+    @patch('src.innsight.health.check_overpass_health')
+    @patch('src.innsight.health.check_ors_health')
+    @patch('src.innsight.health.check_nominatim_health')
+    def test_status_endpoint_exists(self, mock_nominatim, mock_ors, mock_overpass, mock_cache):
+        """Should return 200 when accessing /api/status."""
+        # Mock all services as healthy
+        mock_nominatim.return_value = {
+            "service": "nominatim",
+            "healthy": True,
+            "response_time_ms": 123.0,
+            "status_code": 200,
+            "error": None
+        }
+        mock_ors.return_value = {
+            "service": "ors",
+            "healthy": True,
+            "response_time_ms": 456.0,
+            "status_code": 200,
+            "error": None
+        }
+        mock_overpass.return_value = {
+            "service": "overpass",
+            "healthy": True,
+            "response_time_ms": 789.0,
+            "status_code": 200,
+            "error": None
+        }
+        mock_cache.return_value = {
+            "cache_hits": 150,
+            "cache_misses": 50,
+            "cache_hit_rate": 0.75,
+            "total_requests": 200,
+            "parsing_failures": 5,
+            "cache_size": 15,
+            "cache_max_size": 20
+        }
+
+        response = self.client.get("/api/status")
+        assert response.status_code == 200
+
+    @patch('src.innsight.health.get_cache_stats')
+    @patch('src.innsight.health.check_overpass_health')
+    @patch('src.innsight.health.check_ors_health')
+    @patch('src.innsight.health.check_nominatim_health')
+    def test_status_endpoint_returns_json(self, mock_nominatim, mock_ors, mock_overpass, mock_cache):
+        """Should return JSON content type."""
+        # Mock all services as healthy
+        mock_nominatim.return_value = {"service": "nominatim", "healthy": True, "response_time_ms": 123.0, "status_code": 200, "error": None}
+        mock_ors.return_value = {"service": "ors", "healthy": True, "response_time_ms": 456.0, "status_code": 200, "error": None}
+        mock_overpass.return_value = {"service": "overpass", "healthy": True, "response_time_ms": 789.0, "status_code": 200, "error": None}
+        mock_cache.return_value = {"cache_hits": 150, "cache_misses": 50, "cache_hit_rate": 0.75, "total_requests": 200, "parsing_failures": 5, "cache_size": 15, "cache_max_size": 20}
+
+        response = self.client.get("/api/status")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/json"
+
+    @patch('src.innsight.health.get_cache_stats')
+    @patch('src.innsight.health.check_overpass_health')
+    @patch('src.innsight.health.check_ors_health')
+    @patch('src.innsight.health.check_nominatim_health')
+    def test_status_endpoint_has_required_fields(self, mock_nominatim, mock_ors, mock_overpass, mock_cache):
+        """Should return all required top-level fields."""
+        mock_nominatim.return_value = {"service": "nominatim", "healthy": True, "response_time_ms": 123.0, "status_code": 200, "error": None}
+        mock_ors.return_value = {"service": "ors", "healthy": True, "response_time_ms": 456.0, "status_code": 200, "error": None}
+        mock_overpass.return_value = {"service": "overpass", "healthy": True, "response_time_ms": 789.0, "status_code": 200, "error": None}
+        mock_cache.return_value = {"cache_hits": 150, "cache_misses": 50, "cache_hit_rate": 0.75, "total_requests": 200, "parsing_failures": 5, "cache_size": 15, "cache_max_size": 20}
+
+        response = self.client.get("/api/status")
+        data = response.json()
+
+        # Check required top-level fields
+        assert "status" in data
+        assert "timestamp" in data
+        assert "version" in data
+        assert "uptime_seconds" in data
+        assert "external_services" in data
+        assert "cache" in data
+        assert "parsing_failures" in data
+
+    @patch('src.innsight.health.get_cache_stats')
+    @patch('src.innsight.health.check_overpass_health')
+    @patch('src.innsight.health.check_ors_health')
+    @patch('src.innsight.health.check_nominatim_health')
+    def test_status_endpoint_includes_all_external_services(self, mock_nominatim, mock_ors, mock_overpass, mock_cache):
+        """Should include all three external services."""
+        mock_nominatim.return_value = {"service": "nominatim", "healthy": True, "response_time_ms": 123.0, "status_code": 200, "error": None}
+        mock_ors.return_value = {"service": "ors", "healthy": True, "response_time_ms": 456.0, "status_code": 200, "error": None}
+        mock_overpass.return_value = {"service": "overpass", "healthy": True, "response_time_ms": 789.0, "status_code": 200, "error": None}
+        mock_cache.return_value = {"cache_hits": 150, "cache_misses": 50, "cache_hit_rate": 0.75, "total_requests": 200, "parsing_failures": 5, "cache_size": 15, "cache_max_size": 20}
+
+        response = self.client.get("/api/status")
+        data = response.json()
+
+        services = data["external_services"]
+        assert "nominatim" in services
+        assert "ors" in services
+        assert "overpass" in services
+
+    @patch('src.innsight.health.get_cache_stats')
+    @patch('src.innsight.health.check_overpass_health')
+    @patch('src.innsight.health.check_ors_health')
+    @patch('src.innsight.health.check_nominatim_health')
+    def test_status_endpoint_includes_cache_statistics(self, mock_nominatim, mock_ors, mock_overpass, mock_cache):
+        """Should include cache statistics."""
+        mock_nominatim.return_value = {"service": "nominatim", "healthy": True, "response_time_ms": 123.0, "status_code": 200, "error": None}
+        mock_ors.return_value = {"service": "ors", "healthy": True, "response_time_ms": 456.0, "status_code": 200, "error": None}
+        mock_overpass.return_value = {"service": "overpass", "healthy": True, "response_time_ms": 789.0, "status_code": 200, "error": None}
+        mock_cache.return_value = {
+            "cache_hits": 150,
+            "cache_misses": 50,
+            "cache_hit_rate": 0.75,
+            "total_requests": 200,
+            "parsing_failures": 5,
+            "cache_size": 15,
+            "cache_max_size": 20
+        }
+
+        response = self.client.get("/api/status")
+        data = response.json()
+
+        cache = data["cache"]
+        assert cache["hits"] == 150
+        assert cache["misses"] == 50
+        assert cache["hit_rate"] == 0.75
+        assert cache["total_requests"] == 200
+        assert cache["size"] == 15
+        assert cache["max_size"] == 20
+        assert data["parsing_failures"] == 5
+
+    @patch('src.innsight.health.get_cache_stats')
+    @patch('src.innsight.health.check_overpass_health')
+    @patch('src.innsight.health.check_ors_health')
+    @patch('src.innsight.health.check_nominatim_health')
+    def test_status_endpoint_timestamp_is_valid_iso8601(self, mock_nominatim, mock_ors, mock_overpass, mock_cache):
+        """Should return valid ISO 8601 timestamp."""
+        mock_nominatim.return_value = {"service": "nominatim", "healthy": True, "response_time_ms": 123.0, "status_code": 200, "error": None}
+        mock_ors.return_value = {"service": "ors", "healthy": True, "response_time_ms": 456.0, "status_code": 200, "error": None}
+        mock_overpass.return_value = {"service": "overpass", "healthy": True, "response_time_ms": 789.0, "status_code": 200, "error": None}
+        mock_cache.return_value = {"cache_hits": 150, "cache_misses": 50, "cache_hit_rate": 0.75, "total_requests": 200, "parsing_failures": 5, "cache_size": 15, "cache_max_size": 20}
+
+        response = self.client.get("/api/status")
+        data = response.json()
+
+        timestamp = data["timestamp"]
+        # Try to parse the timestamp as ISO 8601
+        try:
+            datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        except ValueError:
+            assert False, f"Invalid ISO 8601 timestamp: {timestamp}"
+
+    @patch('src.innsight.health.get_cache_stats')
+    @patch('src.innsight.health.check_overpass_health')
+    @patch('src.innsight.health.check_ors_health')
+    @patch('src.innsight.health.check_nominatim_health')
+    def test_status_endpoint_operational_when_all_services_healthy(self, mock_nominatim, mock_ors, mock_overpass, mock_cache):
+        """Should return 'operational' status when all services are healthy."""
+        mock_nominatim.return_value = {"service": "nominatim", "healthy": True, "response_time_ms": 123.0, "status_code": 200, "error": None}
+        mock_ors.return_value = {"service": "ors", "healthy": True, "response_time_ms": 456.0, "status_code": 200, "error": None}
+        mock_overpass.return_value = {"service": "overpass", "healthy": True, "response_time_ms": 789.0, "status_code": 200, "error": None}
+        mock_cache.return_value = {"cache_hits": 150, "cache_misses": 50, "cache_hit_rate": 0.75, "total_requests": 200, "parsing_failures": 5, "cache_size": 15, "cache_max_size": 20}
+
+        response = self.client.get("/api/status")
+        data = response.json()
+
+        assert data["status"] == "operational"
+
+    @patch('src.innsight.health.get_cache_stats')
+    @patch('src.innsight.health.check_overpass_health')
+    @patch('src.innsight.health.check_ors_health')
+    @patch('src.innsight.health.check_nominatim_health')
+    def test_status_endpoint_uptime_is_positive(self, mock_nominatim, mock_ors, mock_overpass, mock_cache):
+        """Should return positive uptime_seconds."""
+        mock_nominatim.return_value = {"service": "nominatim", "healthy": True, "response_time_ms": 123.0, "status_code": 200, "error": None}
+        mock_ors.return_value = {"service": "ors", "healthy": True, "response_time_ms": 456.0, "status_code": 200, "error": None}
+        mock_overpass.return_value = {"service": "overpass", "healthy": True, "response_time_ms": 789.0, "status_code": 200, "error": None}
+        mock_cache.return_value = {"cache_hits": 150, "cache_misses": 50, "cache_hit_rate": 0.75, "total_requests": 200, "parsing_failures": 5, "cache_size": 15, "cache_max_size": 20}
+
+        response = self.client.get("/api/status")
+        data = response.json()
+
+        assert isinstance(data["uptime_seconds"], (int, float))
+        assert data["uptime_seconds"] >= 0

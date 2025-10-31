@@ -9,6 +9,7 @@ import logging
 import hashlib
 import json
 import os
+import time
 from datetime import datetime, UTC
 import tomllib
 import asyncio
@@ -31,6 +32,9 @@ try:
         _VERSION = pyproject["project"]["version"]
 except Exception as e:
     logging.warning(f"Failed to read version from pyproject.toml: {e}")
+
+# Track application start time for uptime calculation
+_START_TIME: float = time.time()
 
 
 def get_version() -> str:
@@ -252,6 +256,68 @@ def create_app() -> FastAPI:
         }
 
         return JSONResponse(status_code=status_code, content=response_data)
+
+    @app.get("/status")
+    async def status_check(r: Recommender = Depends(get_recommender)):
+        """Detailed status endpoint.
+
+        Returns comprehensive system status including:
+        - Application health and uptime
+        - External service availability
+        - Cache statistics
+        - Parsing failures
+
+        This endpoint is designed for monitoring dashboards and management interfaces.
+        """
+        # Get service URLs from environment variables
+        nominatim_url = os.getenv("NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org")
+        ors_url = os.getenv("ORS_BASE_URL", "https://api.openrouteservice.org")
+        overpass_url = os.getenv("OVERPASS_BASE_URL", "https://overpass-api.de/api")
+
+        # Check all services concurrently
+        nominatim_result, ors_result, overpass_result = await asyncio.gather(
+            health.check_nominatim_health(nominatim_url),
+            health.check_ors_health(ors_url),
+            health.check_overpass_health(overpass_url)
+        )
+
+        # Get cache statistics
+        cache_stats = health.get_cache_stats(r)
+
+        # Calculate uptime
+        uptime_seconds = int(time.time() - _START_TIME)
+
+        # Determine overall status
+        all_services_healthy = (
+            nominatim_result["healthy"] and
+            ors_result["healthy"] and
+            overpass_result["healthy"]
+        )
+        status = "operational" if all_services_healthy else "degraded"
+
+        # Build response
+        response_data = {
+            "status": status,
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "version": get_version(),
+            "uptime_seconds": uptime_seconds,
+            "external_services": {
+                "nominatim": nominatim_result,
+                "ors": ors_result,
+                "overpass": overpass_result
+            },
+            "cache": {
+                "hits": cache_stats["cache_hits"],
+                "misses": cache_stats["cache_misses"],
+                "hit_rate": cache_stats["cache_hit_rate"],
+                "total_requests": cache_stats["total_requests"],
+                "size": cache_stats["cache_size"],
+                "max_size": cache_stats["cache_max_size"]
+            },
+            "parsing_failures": cache_stats["parsing_failures"]
+        }
+
+        return response_data
 
     @app.post("/recommend", response_model=RecommendResponse)
     async def recommend(req: RecommendRequest, request: Request, response: Response, r: Recommender = Depends(get_recommender)):
