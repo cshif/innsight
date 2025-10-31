@@ -18,6 +18,7 @@ dependencies = [
     "jieba (>=0.42.1,<0.43.0)",
     "python-dotenv (>=1.0.0,<2.0.0)",
     "fastapi[standard] (>=0.116.1,<0.117.0)",
+    "structlog (>=24.1.0,<25.0.0)",
     "typer (>=0.16.0,<0.17.0)"
 ]
 
