@@ -129,3 +129,43 @@ async def check_overpass_health(base_url: str, timeout: float = 3.0) -> HealthCh
         HealthCheckResult dictionary with service status
     """
     return await _check_service_health("overpass", base_url, timeout)
+
+
+def get_cache_stats(recommender) -> dict:
+    """
+    Get cache statistics from Recommender instance.
+
+    Args:
+        recommender: Recommender instance with cache statistics
+
+    Returns:
+        Dictionary with cache statistics:
+        {
+            "cache_hits": int,
+            "cache_misses": int,
+            "cache_hit_rate": float,  # 0.0-1.0
+            "total_requests": int,
+            "parsing_failures": int,
+            "cache_size": int,
+            "cache_max_size": int
+        }
+    """
+    cache_hits = recommender._cache_hits
+    cache_misses = recommender._cache_misses
+    total_requests = cache_hits + cache_misses
+
+    # Calculate hit rate, avoiding division by zero
+    if total_requests > 0:
+        cache_hit_rate = cache_hits / total_requests
+    else:
+        cache_hit_rate = 0.0
+
+    return {
+        "cache_hits": cache_hits,
+        "cache_misses": cache_misses,
+        "cache_hit_rate": cache_hit_rate,
+        "total_requests": total_requests,
+        "parsing_failures": recommender._parsing_failures,
+        "cache_size": len(recommender._cache),
+        "cache_max_size": recommender._cache_max_size
+    }
