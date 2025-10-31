@@ -11,8 +11,10 @@ import json
 import os
 from datetime import datetime, UTC
 import tomllib
+import asyncio
 
 from .exceptions import ServiceUnavailableError
+from . import health
 
 # Configure logging
 logging.basicConfig(
@@ -208,6 +210,48 @@ def create_app() -> FastAPI:
             "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "version": get_version()
         }
+
+    @app.get("/ready")
+    async def readiness_check():
+        """Readiness check endpoint.
+
+        Checks if all external service dependencies are healthy.
+        Returns 200 if all services are available, 503 if any service is unavailable.
+        This endpoint is designed for readiness probes in Kubernetes/Docker environments.
+        """
+        # Get service URLs from environment variables
+        nominatim_url = os.getenv("NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org")
+        ors_url = os.getenv("ORS_BASE_URL", "https://api.openrouteservice.org")
+        overpass_url = os.getenv("OVERPASS_BASE_URL", "https://overpass-api.de/api")
+
+        # Check all services concurrently
+        nominatim_result, ors_result, overpass_result = await asyncio.gather(
+            health.check_nominatim_health(nominatim_url),
+            health.check_ors_health(ors_url),
+            health.check_overpass_health(overpass_url)
+        )
+
+        # Determine overall readiness
+        all_healthy = (
+            nominatim_result["healthy"] and
+            ors_result["healthy"] and
+            overpass_result["healthy"]
+        )
+
+        status_code = 200 if all_healthy else 503
+        status = "ready" if all_healthy else "not_ready"
+
+        response_data = {
+            "status": status,
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "services": {
+                "nominatim": nominatim_result,
+                "ors": ors_result,
+                "overpass": overpass_result
+            }
+        }
+
+        return JSONResponse(status_code=status_code, content=response_data)
 
     @app.post("/recommend", response_model=RecommendResponse)
     async def recommend(req: RecommendRequest, request: Request, response: Response, r: Recommender = Depends(get_recommender)):
