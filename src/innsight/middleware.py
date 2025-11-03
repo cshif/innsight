@@ -1,8 +1,20 @@
 """Custom middleware for FastAPI application."""
 
 import os
+import secrets
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+
+
+def _generate_trace_id() -> str:
+    """Generate a unique trace ID for the request.
+
+    Returns:
+        A trace ID in the format 'req_<8 hex characters>'
+        Example: 'req_7f3a9b2c'
+    """
+    random_hex = secrets.token_hex(4)  # 4 bytes = 8 hex characters
+    return f"req_{random_hex}"
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -36,5 +48,33 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # Add Cross-Origin-Resource-Policy header
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+
+        return response
+
+
+class RequestTracingMiddleware(BaseHTTPMiddleware):
+    """Middleware to add unique trace ID to each request.
+
+    This middleware:
+    1. Generates a unique trace_id for each request
+    2. Stores it in request.state.trace_id for use in the application
+    3. Returns it in the X-Trace-ID response header
+
+    The trace_id format is: req_<8 hex characters>
+    Example: req_7f3a9b2c
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        # Generate unique trace ID
+        trace_id = _generate_trace_id()
+
+        # Store in request state for use in application
+        request.state.trace_id = trace_id
+
+        # Process the request
+        response = await call_next(request)
+
+        # Add trace ID to response header
+        response.headers["X-Trace-ID"] = trace_id
 
         return response

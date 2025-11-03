@@ -17,7 +17,7 @@ from .models import (
     RecommendResponse,
     ErrorResponse
 )
-from .middleware import SecurityHeadersMiddleware
+from .middleware import SecurityHeadersMiddleware, RequestTracingMiddleware
 from .logging_config import configure_logging, get_logger
 
 # Read and cache version from pyproject.toml at module load time
@@ -68,6 +68,9 @@ def create_app() -> FastAPI:
 
     # Add security headers middleware
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Add request tracing middleware (executes before SecurityHeadersMiddleware)
+    app.add_middleware(RequestTracingMiddleware)
 
     # Add CORS middleware
     app.add_middleware(
