@@ -10,11 +10,14 @@ This test suite validates:
 6. Cache cleanup throttling mechanism
 7. Monitoring statistics and logging
 8. Integration with pipeline parsing and caching logic
+9. Structured logging for cache operations
 """
 
 import time
 import copy
+import json
 import logging
+from io import StringIO
 from unittest.mock import Mock, patch, MagicMock
 import pytest
 
@@ -326,11 +329,12 @@ class TestCacheHitAndMiss:
         self.recommender._save_to_cache(cache_key, test_data)
         self.recommender._get_from_cache(cache_key, top_n=10)
 
-        # Verify debug logging was called
+        # Verify debug logging was called with structured fields
         mock_debug.assert_called_once()
-        call_args = mock_debug.call_args[0]
-        assert "Cache hit for key:" in call_args[0]
-        assert cache_key[:8] in call_args
+        call_args, call_kwargs = mock_debug.call_args
+        assert call_args[0] == "Cache hit"
+        assert "cache_key" in call_kwargs
+        assert call_kwargs["cache_key"] == cache_key[:8]
 
 
 class TestCacheExpiration:
@@ -956,6 +960,203 @@ class TestCacheIntegrationWithPipeline:
 
         # Both should be cache hits
         assert self.recommender._cache_hits == 2
+
+
+class TestStructuredLogging:
+    """Test suite for structured logging in cache operations."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        with patch('innsight.pipeline.AppConfig.from_env') as mock_config_from_env, \
+             patch('innsight.pipeline.AccommodationSearchService') as mock_search_service_class, \
+             patch('innsight.pipeline.RecommenderCore') as mock_recommender_core_class, \
+             patch('innsight.pipeline.GeocodeService') as mock_geocode_service_class, \
+             patch('innsight.pipeline.IsochroneService') as mock_isochrone_service_class:
+
+            # Setup mock config
+            config = Mock()
+            config.recommender_cache_maxsize = 100
+            config.recommender_cache_ttl_seconds = 1800
+            config.recommender_cache_cleanup_interval = 60
+            config.default_missing_score = 50
+            mock_config_from_env.return_value = config
+
+            self.recommender = Recommender()
+
+    def test_cache_hit_includes_structured_fields(self, monkeypatch):
+        """Test that cache hit log includes structured fields."""
+        # Given: Configure logging to JSON format and capture output
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from innsight.logging_config import configure_logging
+
+        log_output = StringIO()
+        configure_logging(stream=log_output)
+
+        # Add item to cache
+        cache_key = "test_cache_key_12345678"
+        test_result = {
+            'stats': {'tier_0': 1},
+            'top': [{'name': 'Hotel A', 'score': 90}],
+            'main_poi': {'name': 'Test POI'},
+            'isochrone_geometry': [],
+            'intervals': {'values': [15], 'unit': 'minutes', 'profile': 'driving-car'}
+        }
+        self.recommender._save_to_cache(cache_key, test_result)
+
+        # When: Get from cache (this should trigger cache hit log)
+        self.recommender._get_from_cache(cache_key, top_n=10)
+
+        # Then: Log should contain structured fields
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the cache hit log (debug level)
+        cache_hit_logs = [line for line in log_lines if 'Cache hit' in line]
+        assert len(cache_hit_logs) > 0, "No cache hit log found"
+
+        # Parse the JSON log
+        log_data = json.loads(cache_hit_logs[0].strip())
+
+        # Verify structured fields
+        assert log_data["message"] == "Cache hit"
+        assert "cache_key" in log_data
+        assert log_data["cache_key"] == cache_key[:8]  # Should be truncated
+        assert "cache_size" in log_data
+        assert "cache_max_size" in log_data
+        assert log_data["cache_max_size"] == 100
+
+    def test_cache_miss_logged_with_reason(self, monkeypatch):
+        """Test that cache miss is logged with reason."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from innsight.logging_config import configure_logging
+
+        log_output = StringIO()
+        configure_logging(stream=log_output)
+
+        # When: Try to get from empty cache (should be cache miss with reason="not_found")
+        cache_key = "nonexistent_key_123"
+        result = self.recommender._get_from_cache(cache_key, top_n=10)
+
+        # Then: Should return None
+        assert result is None
+
+        # And: Log should contain cache miss with reason
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the cache miss log
+        cache_miss_logs = [line for line in log_lines if 'Cache miss' in line]
+        assert len(cache_miss_logs) > 0, "No cache miss log found"
+
+        # Parse the JSON log
+        log_data = json.loads(cache_miss_logs[0].strip())
+
+        # Verify structured fields
+        assert log_data["message"] == "Cache miss"
+        assert log_data["cache_key"] == cache_key[:8]
+        assert log_data["reason"] == "not_found"
+
+    def test_cache_miss_expired_logged_with_reason(self, monkeypatch):
+        """Test that expired cache miss is logged with reason='expired'."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from innsight.logging_config import configure_logging
+
+        log_output = StringIO()
+        configure_logging(stream=log_output)
+
+        # Add item to cache
+        cache_key = "expired_key_12345"
+        test_result = {
+            'stats': {'tier_0': 1},
+            'top': [{'name': 'Hotel A', 'score': 90}],
+            'main_poi': {'name': 'Test POI'},
+            'isochrone_geometry': [],
+            'intervals': {'values': [15], 'unit': 'minutes', 'profile': 'driving-car'}
+        }
+        self.recommender._save_to_cache(cache_key, test_result)
+
+        # Manually expire the cache entry
+        timestamp = time.time() - 2000  # 2000 seconds ago (> TTL of 1800)
+        self.recommender._cache[cache_key] = (test_result, timestamp)
+
+        # When: Try to get expired item
+        result = self.recommender._get_from_cache(cache_key, top_n=10)
+
+        # Then: Should return None
+        assert result is None
+
+        # And: Log should contain cache miss with reason="expired"
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the cache miss log
+        cache_miss_logs = [line for line in log_lines if 'Cache miss' in line]
+        assert len(cache_miss_logs) > 0, "No cache miss log found"
+
+        # Parse the JSON log
+        log_data = json.loads(cache_miss_logs[0].strip())
+
+        # Verify structured fields
+        assert log_data["message"] == "Cache miss"
+        assert log_data["cache_key"] == cache_key[:8]
+        assert log_data["reason"] == "expired"
+
+    def test_parsing_failure_logged_with_details(self, monkeypatch):
+        """Test that parsing failure is logged with query and error details."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from innsight.logging_config import configure_logging
+
+        log_output = StringIO()
+        configure_logging(stream=log_output)
+
+        # Mock parse_query to raise an exception
+        with patch('innsight.pipeline.parse_query') as mock_parse:
+            mock_parse.side_effect = ValueError("Invalid query format")
+
+            # When: Run pipeline with invalid query (this should trigger parsing failure)
+            query_data = {"query": "invalid query that causes parsing to fail"}
+
+            # Mock external services to avoid actual API calls
+            with patch.object(self.recommender, 'recommender') as mock_core:
+
+                mock_core.recommend.return_value = None
+                mock_core.recommend_by_coordinates.return_value = None
+
+                # Run the pipeline
+                result = self.recommender.run(query_data)
+
+        # Then: Parsing failure counter should be incremented
+        assert self.recommender._parsing_failures == 1
+
+        # And: Log should contain parsing failure with details
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the parsing failure log
+        parsing_logs = [line for line in log_lines if 'parsing failed' in line.lower()]
+        assert len(parsing_logs) > 0, "No parsing failure log found"
+
+        # Parse the JSON log
+        log_data = json.loads(parsing_logs[0].strip())
+
+        # Verify structured fields
+        assert "parsing failed" in log_data["message"].lower()
+        assert "query" in log_data
+        assert "error_type" in log_data
+        assert log_data["error_type"] == "ValueError"
+        assert "error_message" in log_data
+        assert "Invalid query format" in log_data["error_message"]
 
 
 if __name__ == "__main__":

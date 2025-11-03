@@ -114,7 +114,15 @@ class Recommender:
                     main_poi_lat = poi_details.get("lat")
                     main_poi_lon = poi_details.get("lon")
                 
-        except Exception:
+        except Exception as e:
+            # Log parsing failure with details
+            logger.warning(
+                "Query parsing failed",
+                query=query,
+                error_type=type(e).__name__,
+                error_message=str(e)
+            )
+
             # If parsing fails, use defaults
             main_poi_name = "未知景點"
             location = None
@@ -428,11 +436,15 @@ class Recommender:
         Returns:
             Cached result with top_n slicing, or None if cache miss/expired
         """
-        # Trigger periodic cleanup
-        self._cleanup_cache()
-
         if cache_key not in self._cache:
             self._cache_misses += 1
+            logger.info(
+                "Cache miss",
+                cache_key=cache_key[:8],
+                reason="not_found"
+            )
+            # Trigger periodic cleanup before returning
+            self._cleanup_cache()
             return None
 
         result, timestamp = self._cache[cache_key]
@@ -441,13 +453,29 @@ class Recommender:
         if time.time() - timestamp > self._cache_ttl:
             del self._cache[cache_key]
             self._cache_misses += 1
+            logger.info(
+                "Cache miss",
+                cache_key=cache_key[:8],
+                reason="expired"
+            )
+            # Trigger periodic cleanup before returning
+            self._cleanup_cache()
             return None
 
         # Cache hit - increment counter and return result
         self._cache_hits += 1
 
-        # Log cache hit at debug level
-        logger.debug("Cache hit for key: %s", cache_key[:8])
+        # Log cache hit at debug level with structured fields
+        logger.debug(
+            "Cache hit",
+            cache_key=cache_key[:8],
+            cache_size=len(self._cache),
+            cache_max_size=self._cache_max_size,
+            top_n=top_n
+        )
+
+        # Trigger periodic cleanup after successful cache hit
+        self._cleanup_cache()
 
         # Return cached result with top_n slicing (deep copy to avoid mutation)
         result_copy = {
