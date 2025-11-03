@@ -52,16 +52,23 @@ def retry_on_network_error(max_attempts=DEFAULT_MAX_ATTEMPTS, delay=DEFAULT_RETR
                             raise ConnectionError(f"Invalid response format: {str(e)}")
                     
                     if attempt == max_attempts - 1:
-                        logger.error("Max retry attempts (%d) reached for %s", max_attempts, func.__name__)
+                        logger.error(
+                            "API call failed after retries",
+                            service="openrouteservice",
+                            error_type=type(e).__name__,
+                            error_message=str(e),
+                            total_attempts=max_attempts
+                        )
                         raise
 
                     logger.warning(
-                        "Attempt %d/%d failed for %s: %s. Retrying in %ds...",
-                        attempt + 1,
-                        max_attempts,
-                        func.__name__,
-                        str(e),
-                        current_delay
+                        "API call failed, retrying",
+                        service="openrouteservice",
+                        attempt=attempt + 1,
+                        max_attempts=max_attempts,
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        retry_delay_seconds=current_delay
                     )
                     time.sleep(current_delay)
                     current_delay *= backoff
@@ -128,8 +135,11 @@ def fallback_cache(maxsize=DEFAULT_CACHE_MAXSIZE, ttl_hours=DEFAULT_CACHE_TTL_HO
                     cached_result, cached_time = _fallback_cache[key]
                     age_hours = (current_time - cached_time) / 3600
                     logger.warning(
-                        "API call failed, falling back to cached result (%.1f hours old): %s",
-                        age_hours, str(e)
+                        "API call failed, using stale cache",
+                        service="openrouteservice",
+                        cache_age_hours=round(age_hours, 1),
+                        error_type=type(e).__name__,
+                        error_message=str(e)
                     )
                     return cached_result
                 else:
@@ -154,6 +164,9 @@ def _fetch_isochrones_from_api(
         locations: Tuple[Tuple[float, float], ...],
         max_range: Tuple[int, ...]
 ) -> List[Polygon]:
+    # Start measuring latency
+    start_time = time.perf_counter()
+
     resp = requests.post(
         url=f"{os.getenv('ORS_URL')}/isochrones/{profile}",
         json={"locations": locations, "range": max_range},
@@ -180,7 +193,18 @@ def _fetch_isochrones_from_api(
             if feature.get("geometry", {}).get("type") == "Polygon":
                 coords = feature["geometry"]["coordinates"][0]  # Exterior ring coordinates
                 polygons.append(Polygon(coords))
-    
+
+    # Log successful API call with latency
+    latency_ms = (time.perf_counter() - start_time) * 1000
+    logger.info(
+        "External API call succeeded",
+        service="openrouteservice",
+        endpoint="/v2/isochrones",
+        profile=profile,
+        latency_ms=round(latency_ms, 2),
+        success=True
+    )
+
     return polygons
 
 

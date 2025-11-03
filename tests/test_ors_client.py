@@ -311,10 +311,10 @@ class TestGetIsochronesByMinutes:
 
         assert len(fallback_result) == 1
         mock_logger.warning.assert_called()
-        
+
         # 驗證有快取回退的 warning
         warning_calls = [str(call) for call in mock_logger.warning.call_args_list]
-        fallback_warnings = [call for call in warning_calls if 'falling back to cached result' in call]
+        fallback_warnings = [call for call in warning_calls if 'using stale cache' in call]
         assert len(fallback_warnings) > 0
 
     # === API 錯誤響應測試 ===
@@ -343,11 +343,167 @@ class TestGetIsochronesByMinutes:
     def test_cache_info_and_clear(self):
         """測試快取資訊和清理功能"""
         get_isochrones_by_minutes.cache_clear()
-        
+
         cache_info = get_isochrones_by_minutes.cache_info()
         assert isinstance(cache_info, dict)
         assert 'size' in cache_info
         assert cache_info['size'] == 0
+
+
+class TestStructuredLogging:
+    """Test suite for structured logging in ORS client."""
+
+    def setup_method(self):
+        """Clear cache before each test."""
+        _fallback_cache.clear()
+        get_isochrones_by_minutes.cache_clear()
+
+    def test_api_success_logged_with_latency(self, monkeypatch):
+        """Test that successful API call logs include latency."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from io import StringIO
+        from innsight.logging_config import configure_logging
+        import json
+
+        log_output = StringIO()
+        configure_logging(stream=log_output)
+
+        # Mock successful API call
+        with patch.dict(os.environ, TEST_ENV):
+            with patch('requests.post') as mock_post:
+                mock_response = Mock()
+                mock_response.status_code = 200
+                mock_response.json.return_value = SAMPLE_GEOJSON
+                mock_response.raise_for_status.return_value = None
+                mock_post.return_value = mock_response
+
+                # When: Call API
+                result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+
+        # Then: Should succeed
+        assert len(result) == 1
+
+        # And: Log should contain success with latency
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the success log
+        success_logs = [line for line in log_lines if 'succeeded' in line.lower()]
+        assert len(success_logs) > 0, "No API success log found"
+
+        # Parse the JSON log
+        log_data = json.loads(success_logs[0].strip())
+
+        # Verify structured fields
+        assert log_data["message"] == "External API call succeeded"
+        assert log_data["service"] == "openrouteservice"
+        assert "endpoint" in log_data
+        assert "profile" in log_data
+        assert log_data["profile"] == "driving-car"
+        assert "latency_ms" in log_data
+        assert log_data["latency_ms"] > 0
+        assert log_data["success"] is True
+
+    def test_retry_logged_with_details(self, monkeypatch):
+        """Test that retry attempts log structured details."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from io import StringIO
+        from innsight.logging_config import configure_logging
+        import json
+
+        log_output = StringIO()
+        configure_logging(stream=log_output)
+
+        # Mock: First call fails with Timeout, second succeeds
+        with patch.dict(os.environ, TEST_ENV):
+            with patch('requests.post') as mock_post:
+                # First call raises Timeout
+                timeout_error = Timeout("Connection timed out")
+
+                # Second call succeeds
+                success_response = Mock()
+                success_response.status_code = 200
+                success_response.json.return_value = SAMPLE_GEOJSON
+                success_response.raise_for_status.return_value = None
+
+                mock_post.side_effect = [timeout_error, success_response]
+
+                # When: Call API (will retry once)
+                with patch('time.sleep'):  # Skip actual sleep
+                    result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+
+        # Then: Should eventually succeed
+        assert len(result) == 1
+
+        # And: Log should contain retry warning
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the retry log
+        retry_logs = [line for line in log_lines if 'retrying' in line.lower() or 'retry' in line.lower()]
+        assert len(retry_logs) > 0, "No retry log found"
+
+        # Parse the JSON log
+        log_data = json.loads(retry_logs[0].strip())
+
+        # Verify structured fields
+        assert "retry" in log_data["message"].lower() or "retrying" in log_data["message"].lower()
+        assert log_data["service"] == "openrouteservice"
+        assert "attempt" in log_data
+        assert log_data["attempt"] == 1
+        assert "max_attempts" in log_data
+        assert log_data["max_attempts"] == 3
+        assert "error_type" in log_data
+        assert log_data["error_type"] == "Timeout"
+        assert "retry_delay_seconds" in log_data
+
+    def test_failure_logged_with_error_type(self, monkeypatch):
+        """Test that final failure logs include error type and total attempts."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from io import StringIO
+        from innsight.logging_config import configure_logging
+        import json
+
+        log_output = StringIO()
+        configure_logging(stream=log_output)
+
+        # Mock: All attempts fail with Timeout
+        with patch.dict(os.environ, TEST_ENV):
+            with patch('requests.post') as mock_post:
+                mock_post.side_effect = Timeout("Connection timed out")
+
+                # When: Call API (will fail after retries)
+                with patch('time.sleep'):  # Skip actual sleep
+                    with pytest.raises(IsochroneError):
+                        get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
+
+        # Then: Log should contain final failure
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the error log (should be last retry-related log before exception)
+        error_logs = [line for line in log_lines if '"level": "error"' in line or '"level":"error"' in line]
+        assert len(error_logs) > 0, "No error log found"
+
+        # Parse the JSON log
+        log_data = json.loads(error_logs[0].strip())
+
+        # Verify structured fields
+        assert "failed" in log_data["message"].lower()
+        assert log_data["service"] == "openrouteservice"
+        assert "error_type" in log_data
+        assert log_data["error_type"] == "Timeout"
+        assert "total_attempts" in log_data
+        assert log_data["total_attempts"] == 3
 
 
 if __name__ == "__main__":
