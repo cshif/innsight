@@ -5,6 +5,8 @@ import secrets
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from .logging_config import bind_trace_id, clear_trace_id
+
 
 def _generate_trace_id() -> str:
     """Generate a unique trace ID for the request.
@@ -58,7 +60,9 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
     This middleware:
     1. Generates a unique trace_id for each request
     2. Stores it in request.state.trace_id for use in the application
-    3. Returns it in the X-Trace-ID response header
+    3. Binds it to the logging context (all logs will include trace_id)
+    4. Returns it in the X-Trace-ID response header
+    5. Cleans up the logging context after the request
 
     The trace_id format is: req_<8 hex characters>
     Example: req_7f3a9b2c
@@ -71,10 +75,18 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
         # Store in request state for use in application
         request.state.trace_id = trace_id
 
-        # Process the request
-        response = await call_next(request)
+        # Bind to logging context (all logs will include trace_id)
+        bind_trace_id(trace_id)
 
-        # Add trace ID to response header
-        response.headers["X-Trace-ID"] = trace_id
+        try:
+            # Process the request
+            response = await call_next(request)
 
-        return response
+            # Add trace ID to response header
+            response.headers["X-Trace-ID"] = trace_id
+
+            return response
+        finally:
+            # Always clear context, even if an exception occurs
+            # This prevents context leakage between requests
+            clear_trace_id()

@@ -99,3 +99,37 @@ def get_logger(name: str) -> structlog.stdlib.BoundLogger:
         logger.info("Application started", version="1.0.0")
     """
     return structlog.get_logger(name)
+
+
+def bind_trace_id(trace_id: str) -> None:
+    """Bind trace_id to the current logging context.
+
+    All logs within this context will automatically include the trace_id.
+    This is typically called in middleware to attach the request's trace_id
+    to all logs generated during request processing.
+
+    Args:
+        trace_id: The trace ID to bind (e.g., 'req_7f3a9b2c')
+
+    Example:
+        bind_trace_id("req_7f3a9b2c")
+        logger.info("Processing request")  # Will include trace_id automatically
+    """
+    structlog.contextvars.bind_contextvars(trace_id=trace_id)
+
+
+def clear_trace_id() -> None:
+    """Clear trace_id from the current logging context.
+
+    This should be called at the end of each request to prevent
+    context leakage between requests. Typically called in middleware's
+    finally block.
+
+    Example:
+        try:
+            bind_trace_id("req_7f3a9b2c")
+            # ... process request ...
+        finally:
+            clear_trace_id()  # Ensure cleanup even if exceptions occur
+    """
+    structlog.contextvars.clear_contextvars()
