@@ -5,9 +5,13 @@ import copy
 import geopandas as gpd
 import hashlib
 import json
-import logging
 import math
 import time
+
+from .logging_config import get_logger
+
+# Get module logger
+logger = get_logger(__name__)
 from shapely.geometry import Polygon
 
 from .config import AppConfig
@@ -44,7 +48,7 @@ class Recommender:
         self._parsing_failures: int = 0
 
         # Log cache configuration on initialization
-        logging.info(
+        logger.info(
             "Cache initialized - Max size: %d, TTL: %d seconds (%.1f minutes), "
             "Cleanup interval: %d seconds",
             self._cache_max_size,
@@ -443,7 +447,7 @@ class Recommender:
         self._cache_hits += 1
 
         # Log cache hit at debug level
-        logging.debug("Cache hit for key: %s", cache_key[:8])
+        logger.debug("Cache hit for key: %s", cache_key[:8])
 
         # Return cached result with top_n slicing (deep copy to avoid mutation)
         result_copy = {
@@ -515,7 +519,7 @@ class Recommender:
         total_requests = self._cache_hits + self._cache_misses
         hit_rate = (self._cache_hits / total_requests * 100) if total_requests > 0 else 0
 
-        logging.info(
+        logger.info(
             "Cache stats - Size: %d/%d, Hits: %d, Misses: %d, Hit rate: %.1f%%, "
             "Parsing failures: %d, Expired: %d, Evicted: %d",
             len(self._cache),

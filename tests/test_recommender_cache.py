@@ -311,7 +311,7 @@ class TestCacheHitAndMiss:
 
         assert self.recommender._cache_hits == initial_hits + 3
 
-    @patch('innsight.pipeline.logging.debug')
+    @patch('innsight.pipeline.logger.debug')
     def test_cache_hit_logs_debug(self, mock_debug):
         """Test that cache hit logs at DEBUG level."""
         cache_key = "test_key_for_logging"
@@ -699,7 +699,7 @@ class TestCacheCleanupThrottling:
             mock_config.return_value = config
             self.recommender = Recommender()
 
-    @patch('innsight.pipeline.logging.info')
+    @patch('innsight.pipeline.logger.info')
     def test_cleanup_skipped_within_interval(self, mock_info):
         """Test that cleanup is skipped within cleanup interval."""
         # Set last cleanup time
@@ -713,7 +713,7 @@ class TestCacheCleanupThrottling:
         # Logging should not be called (no cleanup performed)
         mock_info.assert_not_called()
 
-    @patch('innsight.pipeline.logging.info')
+    @patch('innsight.pipeline.logger.info')
     def test_cleanup_runs_after_interval(self, mock_info):
         """Test that cleanup runs after cleanup interval."""
         # Set last cleanup time
@@ -774,7 +774,7 @@ class TestCacheMonitoringStatistics:
 
         assert expected_rate == 70.0
 
-    @patch('innsight.pipeline.logging.info')
+    @patch('innsight.pipeline.logger.info')
     def test_statistics_logging(self, mock_info):
         """Test that cache statistics are logged."""
         # Add some data

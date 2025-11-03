@@ -284,8 +284,8 @@ class TestGetIsochronesByMinutes:
     
     @patch.dict(os.environ, TEST_ENV)
     @patch('requests.post')
-    @patch('innsight.ors_client.logging')
-    def test_cache_fallback_with_warning(self, mock_logging, mock_post):
+    @patch('innsight.ors_client.logger')
+    def test_cache_fallback_with_warning(self, mock_logger, mock_post):
         """測試快取回退機制"""
         # 先建立快取
         mock_post.return_value = self._create_mock_response(json_data=SAMPLE_GEOJSON)
@@ -308,12 +308,12 @@ class TestGetIsochronesByMinutes:
         
         # 再次調用，使用過期快取
         fallback_result = get_isochrones_by_minutes(coord=TEST_COORD, intervals=[15])
-        
+
         assert len(fallback_result) == 1
-        mock_logging.warning.assert_called()
+        mock_logger.warning.assert_called()
         
         # 驗證有快取回退的 warning
-        warning_calls = [str(call) for call in mock_logging.warning.call_args_list]
+        warning_calls = [str(call) for call in mock_logger.warning.call_args_list]
         fallback_warnings = [call for call in warning_calls if 'falling back to cached result' in call]
         assert len(fallback_warnings) > 0
 

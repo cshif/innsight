@@ -1,4 +1,3 @@
-import logging
 import os
 import time
 from functools import wraps
@@ -11,6 +10,10 @@ from requests.exceptions import ConnectionError, HTTPError, Timeout
 from shapely.geometry import Polygon
 
 from .exceptions import IsochroneError, NetworkError, APIError
+from .logging_config import get_logger
+
+# Get module logger
+logger = get_logger(__name__)
 
 load_dotenv()
 
@@ -49,10 +52,10 @@ def retry_on_network_error(max_attempts=DEFAULT_MAX_ATTEMPTS, delay=DEFAULT_RETR
                             raise ConnectionError(f"Invalid response format: {str(e)}")
                     
                     if attempt == max_attempts - 1:
-                        logging.error("Max retry attempts (%d) reached for %s", max_attempts, func.__name__)
+                        logger.error("Max retry attempts (%d) reached for %s", max_attempts, func.__name__)
                         raise
-                    
-                    logging.warning(
+
+                    logger.warning(
                         "Attempt %d/%d failed for %s: %s. Retrying in %ds...",
                         attempt + 1,
                         max_attempts,
@@ -124,7 +127,7 @@ def fallback_cache(maxsize=DEFAULT_CACHE_MAXSIZE, ttl_hours=DEFAULT_CACHE_TTL_HO
                 if key in _fallback_cache:
                     cached_result, cached_time = _fallback_cache[key]
                     age_hours = (current_time - cached_time) / 3600
-                    logging.warning(
+                    logger.warning(
                         "API call failed, falling back to cached result (%.1f hours old): %s",
                         age_hours, str(e)
                     )

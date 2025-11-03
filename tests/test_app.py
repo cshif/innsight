@@ -1,5 +1,7 @@
 """Tests for FastAPI app creation and configuration."""
 
+import json
+from io import StringIO
 from unittest.mock import patch, Mock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -298,3 +300,78 @@ class TestAppModule:
         # Then: The app should be the instance returned by create_app
         # Note: This test may be affected by import caching
         assert hasattr(app, 'title')  # Basic check that it's an app-like object
+
+
+class TestLoggingIntegration:
+    """Test suite for logging configuration integration."""
+
+    @patch('src.innsight.app.configure_logging')
+    def test_create_app_configures_logging(self, mock_configure_logging):
+        """Test that create_app calls configure_logging."""
+        # When: Create app
+        app = create_app()
+
+        # Then: configure_logging should be called
+        mock_configure_logging.assert_called_once()
+
+    def test_app_uses_structlog_json_format(self, monkeypatch):
+        """Test that app can output logs in JSON format."""
+        # Given: Set environment to JSON mode
+        monkeypatch.setenv("LOG_FORMAT", "json")
+
+        # Capture log output
+        log_output = StringIO()
+
+        # When: Configure logging and create app
+        with patch('src.innsight.app.configure_logging') as mock_configure:
+            # Configure the actual logging for testing
+            from src.innsight.logging_config import configure_logging
+            configure_logging(stream=log_output)
+
+            # Create app (which should use the configured logger)
+            app = create_app()
+
+            # Trigger a log message by accessing a logger
+            from src.innsight.logging_config import get_logger
+            logger = get_logger("test.app")
+            logger.info("test message from app", key="value")
+
+        # Then: Log output should be valid JSON
+        log_output.seek(0)
+        log_line = log_output.readline().strip()
+
+        # Should be valid JSON
+        log_data = json.loads(log_line)
+        assert "timestamp" in log_data
+        assert "level" in log_data
+        assert log_data["message"] == "test message from app"
+        assert log_data["key"] == "value"
+
+    def test_app_uses_structlog_text_format(self, monkeypatch):
+        """Test that app can output logs in text format."""
+        # Given: Set environment to text mode
+        monkeypatch.setenv("LOG_FORMAT", "text")
+
+        # Capture log output
+        log_output = StringIO()
+
+        # When: Configure logging
+        from src.innsight.logging_config import configure_logging
+        configure_logging(stream=log_output)
+
+        # Create logger and log a message
+        from src.innsight.logging_config import get_logger
+        logger = get_logger("test.app")
+        logger.info("test message from app")
+
+        # Then: Log output should NOT be JSON
+        log_output.seek(0)
+        log_line = log_output.readline()
+
+        # Should contain the message but not be valid JSON
+        assert "test message from app" in log_line
+
+        # Should fail to parse as JSON
+        import pytest
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(log_line)

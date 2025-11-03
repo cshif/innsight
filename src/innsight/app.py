@@ -2,7 +2,6 @@ from fastapi import FastAPI, Depends, Response, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 import hashlib
 import json
 import os
@@ -19,13 +18,7 @@ from .models import (
     ErrorResponse
 )
 from .middleware import SecurityHeadersMiddleware
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+from .logging_config import configure_logging, get_logger
 
 # Read and cache version from pyproject.toml at module load time
 _VERSION: str = "unknown"
@@ -34,7 +27,9 @@ try:
         pyproject = tomllib.load(f)
         _VERSION = pyproject["project"]["version"]
 except Exception as e:
-    logging.warning(f"Failed to read version from pyproject.toml: {e}")
+    # Note: Logger will be configured when create_app() is called
+    # For now, just store the error and log it later if needed
+    _VERSION_ERROR = str(e)
 
 # Track application start time for uptime calculation
 _START_TIME: float = time.time()
@@ -66,6 +61,9 @@ def _generate_etag(content: dict) -> str:
 
 
 def create_app() -> FastAPI:
+    # Configure structured logging
+    configure_logging()
+
     app = FastAPI(title="InnSight API", root_path="/api")
 
     # Add security headers middleware
