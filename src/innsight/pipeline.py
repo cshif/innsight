@@ -59,16 +59,20 @@ class Recommender:
     
     def run(self, query_data: Dict[str, Any]) -> Dict[str, Any]:
         """Run the recommendation pipeline.
-        
+
         Args:
             query_data: Dictionary containing query parameters
                 - query: str - Search query
                 - filters: List[str] - Optional filters
                 - top_n: int - Optional maximum results
-        
+
         Returns:
             Dictionary with recommendation results
         """
+        # Start measuring total pipeline duration
+        pipeline_start = time.perf_counter()
+        stages = {}
+
         query = query_data.get("query", "")
         filters = query_data.get("filters")
         top_n = query_data.get("top_n", 20)
@@ -85,11 +89,13 @@ class Recommender:
             }
         
         # Parse query to extract main POI information (只解析一次)
+        parsing_start = time.perf_counter()
         try:
             parsed_query = parse_query(query)
             location = extract_location_from_query(parsed_query, query)
             poi = parsed_query.get('poi', '')
             parsed_filters = parsed_query.get('filters', [])
+            stages['parsing_ms'] = round((time.perf_counter() - parsing_start) * 1000, 2)
             
             # Determine the main POI name and search term
             if poi:
@@ -107,9 +113,11 @@ class Recommender:
             poi_details = None
             main_poi_lat = None
             main_poi_lon = None
-            
+
             if search_term:
+                geocoding_start = time.perf_counter()
                 poi_details = self.geocode_service.geocode_location_detailed(search_term)
+                stages['geocoding_ms'] = round((time.perf_counter() - geocoding_start) * 1000, 2)
                 if poi_details:
                     main_poi_lat = poi_details.get("lat")
                     main_poi_lon = poi_details.get("lon")
@@ -148,11 +156,21 @@ class Recommender:
             )
             cached_result = self._get_from_cache(cache_key, top_n)
             if cached_result is not None:
+                # Log performance metrics for cache hit
+                total_duration_ms = round((time.perf_counter() - pipeline_start) * 1000, 2)
+                logger.info(
+                    "Recommendation pipeline completed",
+                    total_duration_ms=total_duration_ms,
+                    cache_hit=True,
+                    results_count=len(cached_result.get('top', [])),
+                    stages=stages
+                )
                 return cached_result
         
         # Search for accommodations
         try:
             # If we have main POI coordinates, use them for accommodation search
+            search_start = time.perf_counter()
             if main_poi_lat is not None and main_poi_lon is not None:
                 gdf = self.recommender.recommend_by_coordinates(
                     main_poi_lat, main_poi_lon, merged_filters, top_n, weights
@@ -160,6 +178,7 @@ class Recommender:
             else:
                 # Fallback to original query-based search
                 gdf = self.recommender.recommend(query, merged_filters, top_n, weights)
+            stages['search_ms'] = round((time.perf_counter() - search_start) * 1000, 2)
             
             # Convert to serializable format
             top_results = self._serialize_gdf(gdf)
@@ -170,17 +189,19 @@ class Recommender:
             # Get isochrone geometry data
             isochrone_geometry = []
             intervals_data = {"values": [], "unit": "minutes", "profile": "driving-car"}
-            
+
             if main_poi_lat is not None and main_poi_lon is not None:
                 coord = (float(main_poi_lon), float(main_poi_lat))
                 intervals = self.config.default_isochrone_intervals
+                isochrone_start = time.perf_counter()
                 isochrones_list = self.isochrone_service.get_isochrones_with_fallback(coord, intervals)
-                
+                stages['isochrone_ms'] = round((time.perf_counter() - isochrone_start) * 1000, 2)
+
                 if isochrones_list:
                     isochrone_geometry = self._convert_isochrones_to_geojson(isochrones_list)
                     intervals_data = {
                         "values": intervals,
-                        "unit": "minutes", 
+                        "unit": "minutes",
                         "profile": "driving-car"
                     }
             
@@ -196,6 +217,16 @@ class Recommender:
             # Save to cache if parsing succeeded
             if cache_key is not None:
                 self._save_to_cache(cache_key, result)
+
+            # Log performance metrics
+            total_duration_ms = round((time.perf_counter() - pipeline_start) * 1000, 2)
+            logger.info(
+                "Recommendation pipeline completed",
+                total_duration_ms=total_duration_ms,
+                cache_hit=False,
+                results_count=len(top_results),
+                stages=stages
+            )
 
             return result
             
