@@ -375,3 +375,165 @@ class TestLoggingIntegration:
         import pytest
         with pytest.raises(json.JSONDecodeError):
             json.loads(log_line)
+
+
+class TestStructuredLogging:
+    """Test suite for structured logging in app and middleware."""
+
+    def test_successful_request_logged(self, monkeypatch):
+        """Test that successful API request logs include all required fields."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from src.innsight.logging_config import configure_logging
+
+        log_output = StringIO()
+
+        # Mock the Recommender to avoid external dependencies
+        with patch('src.innsight.pipeline.Recommender') as mock_recommender_class:
+            mock_recommender = Mock()
+            mock_recommender.run.return_value = {
+                "stats": {},
+                "top": [],
+                "main_poi": {"name": "Test POI"},
+                "isochrone_geometry": [],
+                "intervals": {"values": [15], "unit": "minutes", "profile": "driving-car"}
+            }
+            mock_recommender_class.return_value = mock_recommender
+
+            # Create app (this will configure logging internally)
+            app = create_app()
+
+            # Reconfigure logging to capture output after app creation
+            configure_logging(stream=log_output)
+
+            client = TestClient(app)
+
+            # When: Call endpoint
+            response = client.post("/recommend", json={"query": "test query"})
+
+        # Then: Should succeed
+        assert response.status_code == 200
+
+        # And: Log should contain request completion with all fields
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the request completion log
+        request_logs = [line for line in log_lines if 'completed' in line.lower()]
+        assert len(request_logs) > 0, "No API request completion log found"
+
+        # Parse the JSON log
+        log_data = json.loads(request_logs[0].strip())
+
+        # Verify structured fields
+        assert log_data["message"] == "API request completed"
+        assert log_data["method"] == "POST"
+        assert log_data["endpoint"] == "/recommend"
+        assert log_data["status_code"] == 200
+        assert "duration_ms" in log_data
+        assert "trace_id" in log_data  # Should be auto-included from context
+
+    def test_request_duration_logged(self, monkeypatch):
+        """Test that request duration is logged and is a positive number."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from src.innsight.logging_config import configure_logging
+
+        log_output = StringIO()
+
+        # Mock the Recommender
+        with patch('src.innsight.pipeline.Recommender') as mock_recommender_class:
+            mock_recommender = Mock()
+            mock_recommender.run.return_value = {
+                "stats": {},
+                "top": [],
+                "main_poi": {"name": "Test POI"},
+                "isochrone_geometry": [],
+                "intervals": {"values": [15], "unit": "minutes", "profile": "driving-car"}
+            }
+            mock_recommender_class.return_value = mock_recommender
+
+            # Create app (this will configure logging internally)
+            app = create_app()
+
+            # Reconfigure logging to capture output after app creation
+            configure_logging(stream=log_output)
+
+            client = TestClient(app)
+
+            # When: Call endpoint
+            response = client.post("/recommend", json={"query": "test query"})
+
+        # Then: Should succeed
+        assert response.status_code == 200
+
+        # And: Duration should be logged as a positive number
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the request completion log
+        request_logs = [line for line in log_lines if 'completed' in line.lower()]
+        assert len(request_logs) > 0
+
+        # Parse the JSON log
+        log_data = json.loads(request_logs[0].strip())
+
+        # Verify duration
+        assert "duration_ms" in log_data
+        duration = log_data["duration_ms"]
+        assert isinstance(duration, (int, float))
+        assert duration > 0
+        assert duration < 5000  # Should be less than 5 seconds for test
+
+    def test_validation_error_logged(self, monkeypatch):
+        """Test that validation errors are logged with error details."""
+        # Given: Configure logging to JSON format
+        monkeypatch.setenv("LOG_FORMAT", "json")
+        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+        from src.innsight.logging_config import configure_logging
+
+        log_output = StringIO()
+
+        # Mock the Recommender
+        with patch('src.innsight.pipeline.Recommender') as mock_recommender_class:
+            mock_recommender = Mock()
+            mock_recommender_class.return_value = mock_recommender
+
+            # Create app (this will configure logging internally)
+            app = create_app()
+
+            # Reconfigure logging to capture output after app creation
+            configure_logging(stream=log_output)
+
+            client = TestClient(app)
+
+            # When: Send invalid request (missing required field)
+            response = client.post("/recommend", json={})  # Missing 'query' field
+
+        # Then: Should return 400
+        assert response.status_code == 400
+
+        # And: Log should contain validation error
+        log_output.seek(0)
+        log_lines = log_output.readlines()
+
+        # Find the validation error log
+        error_logs = [line for line in log_lines if 'validation failed' in line.lower()]
+        assert len(error_logs) > 0, "No validation error log found"
+
+        # Parse the JSON log
+        log_data = json.loads(error_logs[0].strip())
+
+        # Verify structured fields
+        assert "validation failed" in log_data["message"].lower()
+        assert log_data["error_type"] == "RequestValidationError"
+        assert "error_message" in log_data
+        assert log_data["endpoint"] == "/recommend"
+        assert log_data["method"] == "POST"
+        assert log_data["status_code"] == 400
+        assert "trace_id" in log_data  # Should be auto-included from context

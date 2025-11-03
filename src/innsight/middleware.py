@@ -2,10 +2,14 @@
 
 import os
 import secrets
+import time
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from .logging_config import bind_trace_id, clear_trace_id
+from .logging_config import bind_trace_id, clear_trace_id, get_logger
+
+# Get module logger
+logger = get_logger(__name__)
 
 
 def _generate_trace_id() -> str:
@@ -78,9 +82,24 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
         # Bind to logging context (all logs will include trace_id)
         bind_trace_id(trace_id)
 
+        # Start measuring request duration
+        start_time = time.perf_counter()
+
         try:
             # Process the request
             response = await call_next(request)
+
+            # Calculate duration
+            duration_ms = (time.perf_counter() - start_time) * 1000
+
+            # Log request completion
+            logger.info(
+                "API request completed",
+                method=request.method,
+                endpoint=request.url.path,
+                status_code=response.status_code,
+                duration_ms=round(duration_ms, 2)
+            )
 
             # Add trace ID to response header
             response.headers["X-Trace-ID"] = trace_id

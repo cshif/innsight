@@ -20,6 +20,9 @@ from .models import (
 from .middleware import SecurityHeadersMiddleware, RequestTracingMiddleware
 from .logging_config import configure_logging, get_logger
 
+# Get module logger
+logger = get_logger(__name__)
+
 # Read and cache version from pyproject.toml at module load time
 _VERSION: str = "unknown"
 try:
@@ -83,6 +86,15 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request, exc):
+        logger.warning(
+            "Request validation failed",
+            error_type="RequestValidationError",
+            error_message=str(exc),
+            endpoint=request.url.path,
+            method=request.method,
+            status_code=400
+        )
+
         return JSONResponse(
             status_code=400,
             content={
@@ -93,6 +105,15 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(ServiceUnavailableError)
     async def service_unavailable_exception_handler(request, exc):
+        logger.error(
+            "Service unavailable",
+            error_type="ServiceUnavailableError",
+            error_message=str(exc),
+            endpoint=request.url.path,
+            method=request.method,
+            status_code=503
+        )
+
         return JSONResponse(
             status_code=503,
             content={
