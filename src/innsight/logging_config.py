@@ -4,6 +4,7 @@ This module provides a configurable logging system that supports:
 - JSON format for production (machine-readable)
 - Console format for development (human-readable)
 - Environment variable control via LOG_FORMAT and LOG_LEVEL
+- Automatic environment-based defaults (ENV=prod -> JSON, ENV=local -> text)
 
 Example:
     # JSON format (production)
@@ -11,20 +12,58 @@ Example:
 
     # Text format (development)
     LOG_FORMAT=text python app.py
+
+    # Automatic based on environment
+    ENV=prod python app.py  # Uses JSON format automatically
+    ENV=local python app.py  # Uses text format automatically
 """
 
 import os
 import sys
 import logging
+import tomllib
+from pathlib import Path
 from typing import TextIO, Optional
 
 import structlog
+
+
+def _get_app_version() -> str:
+    """Read application version from pyproject.toml.
+
+    Returns:
+        Application version string, or "unknown" if unavailable.
+    """
+    try:
+        # Navigate from this file to project root
+        # Current: src/innsight/logging_config.py
+        # Project root: ../../..
+        project_root = Path(__file__).parent.parent.parent
+        pyproject_path = project_root / "pyproject.toml"
+
+        with open(pyproject_path, "rb") as f:
+            pyproject = tomllib.load(f)
+            return pyproject["project"]["version"]
+    except Exception:
+        return "unknown"
 
 
 def _rename_event_to_message(logger, method_name, event_dict):
     """Rename 'event' key to 'message' for consistency with standard logging."""
     if "event" in event_dict:
         event_dict["message"] = event_dict.pop("event")
+    return event_dict
+
+
+def _add_environment_context(logger, method_name, event_dict):
+    """Add environment and version information to all log entries.
+
+    Enriches logs with:
+    - environment: Current environment (from ENV variable)
+    - app_version: Application version (from pyproject.toml)
+    """
+    event_dict["environment"] = os.getenv("ENV", "local")
+    event_dict["app_version"] = _get_app_version()
     return event_dict
 
 
@@ -35,12 +74,27 @@ def configure_logging(stream: Optional[TextIO] = None) -> None:
         stream: Optional output stream for testing. If None, uses sys.stdout.
 
     Environment Variables:
-        LOG_FORMAT: Output format - "json" or "text" (default: "json")
-        LOG_LEVEL: Logging level - "DEBUG", "INFO", "WARNING", "ERROR" (default: "INFO")
+        ENV: Environment name - "local", "dev", "prod" (default: "local")
+             Used to determine default LOG_FORMAT and LOG_LEVEL if not explicitly set.
+        LOG_FORMAT: Output format - "json" or "text"
+                   Default: "json" for prod, "text" for local/dev
+        LOG_LEVEL: Logging level - "DEBUG", "INFO", "WARNING", "ERROR"
+                  Default: "INFO" for prod, "DEBUG" for local/dev
     """
-    # Read environment variables
-    log_format = os.getenv("LOG_FORMAT", "json").lower()
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    # Read environment type
+    env = os.getenv("ENV", "local")
+
+    # Determine defaults based on environment
+    if env == "prod":
+        default_format = "json"
+        default_level = "INFO"
+    else:
+        default_format = "text"
+        default_level = "DEBUG"
+
+    # Read environment variables with environment-based defaults
+    log_format = os.getenv("LOG_FORMAT", default_format).lower()
+    log_level = os.getenv("LOG_LEVEL", default_level).upper()
 
     # Convert log level string to logging constant
     numeric_level = getattr(logging, log_level, logging.INFO)
@@ -62,6 +116,7 @@ def configure_logging(stream: Optional[TextIO] = None) -> None:
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
+        _add_environment_context,  # Add environment and version info
         _rename_event_to_message,  # Rename 'event' to 'message'
     ]
 
