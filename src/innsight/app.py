@@ -7,6 +7,7 @@ import json
 import os
 import time
 from datetime import datetime, UTC
+from pathlib import Path
 import tomllib
 import asyncio
 
@@ -26,13 +27,21 @@ logger = get_logger(__name__)
 # Read and cache version from pyproject.toml at module load time
 _VERSION: str = "unknown"
 try:
-    with open("pyproject.toml", "rb") as f:
+    # Calculate project root directory (3 levels up from this file)
+    # Current file: /path/to/src/innsight/app.py
+    # Project root: /path/to/
+    project_root = Path(__file__).parent.parent.parent
+    pyproject_path = project_root / "pyproject.toml"
+
+    with open(pyproject_path, "rb") as f:
         pyproject = tomllib.load(f)
         _VERSION = pyproject["project"]["version"]
+except FileNotFoundError:
+    # pyproject.toml not found - will log warning when logger is configured
+    _VERSION_ERROR = f"pyproject.toml not found at {pyproject_path if 'pyproject_path' in locals() else 'unknown path'}"
 except Exception as e:
-    # Note: Logger will be configured when create_app() is called
-    # For now, just store the error and log it later if needed
-    _VERSION_ERROR = str(e)
+    # Other errors (parsing, missing keys, etc.)
+    _VERSION_ERROR = f"Failed to read version from pyproject.toml: {str(e)}"
 
 # Track application start time for uptime calculation
 _START_TIME: float = time.time()
