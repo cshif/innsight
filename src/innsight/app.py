@@ -20,6 +20,7 @@ from .models import (
 )
 from .middleware import SecurityHeadersMiddleware, RequestTracingMiddleware
 from .logging_config import configure_logging, get_logger
+from .config import AppConfig
 
 # Get module logger
 logger = get_logger(__name__)
@@ -73,6 +74,9 @@ def _generate_etag(content: dict) -> str:
 
 
 def create_app() -> FastAPI:
+    # Load configuration from environment
+    config = AppConfig.from_env()
+
     # Configure structured logging
     configure_logging()
 
@@ -91,10 +95,10 @@ def create_app() -> FastAPI:
     # Add request tracing middleware (executes before SecurityHeadersMiddleware)
     app.add_middleware(RequestTracingMiddleware)
 
-    # Add CORS middleware
+    # Add CORS middleware with dynamic configuration based on environment
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # In production, specify your frontend domain
+        allow_origins=config.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
