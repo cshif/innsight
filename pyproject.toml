@@ -19,7 +19,8 @@ dependencies = [
     "python-dotenv (>=1.0.0,<2.0.0)",
     "fastapi[standard] (>=0.116.1,<0.117.0)",
     "structlog (>=24.1.0,<25.0.0)",
-    "typer (>=0.16.0,<0.17.0)"
+    "typer (>=0.16.0,<0.17.0)",
+    "gunicorn (>=23.0.0,<24.0.0)"
 ]
 
 [project.scripts]
@@ -27,9 +28,6 @@ innsight = "innsight.cli:main"
 
 [tool.poetry]
 packages = [{include = "innsight", from = "src"}]
-
-[tool.poetry.group.dev.dependencies]
-gunicorn = "^23.0.0"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
