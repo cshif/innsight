@@ -7,17 +7,24 @@ from dotenv import load_dotenv
 
 from .exceptions import ConfigurationError
 
-load_dotenv()
+# Support custom ENV_FILE for loading different .env files
+# e.g., ENV_FILE=.env.prod gunicorn ...
+env_file = os.getenv("ENV_FILE", ".env")
+load_dotenv(env_file)
 
 
 @dataclass
 class AppConfig:
     """Central configuration for the innsight application."""
-    
+
     # API Endpoints
     api_endpoint: str
     ors_url: str
     ors_api_key: str
+
+    # Environment Settings
+    env: str = field(default_factory=lambda: os.getenv("ENV", "local"))
+    frontend_url: str = field(default_factory=lambda: os.getenv("FRONTEND_URL", "http://localhost:5173"))
     
     # Client Settings
     nominatim_user_agent: str = "innsight"
@@ -114,3 +121,36 @@ class AppConfig:
                 raise ConfigurationError(f"Rating weight {weight_name} must be a number, got {type(weight_value)}")
             if weight_value < 0:
                 raise ConfigurationError(f"Rating weight {weight_name} must be non-negative, got {weight_value}")
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production environment."""
+        return self.env == "prod"
+
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development environment."""
+        return self.env in ("local", "dev")
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """Get CORS origins based on environment."""
+        if self.is_production:
+            # Production: only allow specified frontend URL
+            return [self.frontend_url]
+        else:
+            # Development: allow all origins
+            return ["*"]
+
+    @property
+    def log_format(self) -> str:
+        """Get log format based on environment."""
+        return "json" if self.is_production else "text"
+
+    @property
+    def log_level(self) -> str:
+        """Get log level based on environment."""
+        if self.is_production:
+            return os.getenv("LOG_LEVEL", "INFO")
+        else:
+            return os.getenv("LOG_LEVEL", "DEBUG")
