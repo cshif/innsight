@@ -38,10 +38,10 @@ try:
         _VERSION = pyproject["project"]["version"]
 except FileNotFoundError:
     # pyproject.toml not found - will log warning when logger is configured
-    _VERSION_ERROR = f"pyproject.toml not found at {pyproject_path if 'pyproject_path' in locals() else 'unknown path'}"
-except Exception as e:
+    pass
+except Exception:
     # Other errors (parsing, missing keys, etc.)
-    _VERSION_ERROR = f"Failed to read version from pyproject.toml: {str(e)}"
+    pass
 
 # Track application start time for uptime calculation
 _START_TIME: float = time.time()
@@ -75,6 +75,13 @@ def _generate_etag(content: dict) -> str:
 def create_app() -> FastAPI:
     # Configure structured logging
     configure_logging()
+
+    # Warn if version couldn't be read
+    if _VERSION == "unknown":
+        logger.warning(
+            "Failed to read application version from pyproject.toml",
+            version=_VERSION
+        )
 
     app = FastAPI(title="InnSight API", root_path="/api")
 
