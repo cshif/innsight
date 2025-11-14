@@ -2,6 +2,9 @@ from fastapi import FastAPI, Depends, Response, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import hashlib
 import json
 import os
@@ -89,6 +92,13 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="InnSight API", root_path="/api")
 
+    # Initialize Rate Limiter
+    limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=["100/minute"] if config.is_development else ["60/minute"]
+    )
+    app.state.limiter = limiter
+
     # Add security headers middleware
     app.add_middleware(SecurityHeadersMiddleware)
 
@@ -140,6 +150,24 @@ def create_app() -> FastAPI:
                 "error": "Service Unavailable",
                 "message": str(exc)
             }
+        )
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        logger.warning(
+            "Rate limit exceeded",
+            endpoint=request.url.path,
+            client_ip=get_remote_address(request),
+            status_code=429
+        )
+
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "Rate Limit Exceeded",
+                "message": "Too many requests. Please try again later."
+            },
+            headers={"Retry-After": "60"}
         )
 
     from .pipeline import Recommender
@@ -264,6 +292,7 @@ def create_app() -> FastAPI:
         return response_data
 
     @app.post("/recommend", response_model=RecommendResponse)
+    @limiter.limit("100/minute" if config.is_development else "10/minute")
     async def recommend(req: RecommendRequest, request: Request, response: Response, r: Recommender = Depends(get_recommender)):
         # Get recommendation result
         result = r.run(req.model_dump())
