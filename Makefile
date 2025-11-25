@@ -1,4 +1,4 @@
 .PHONY: dev
 
 dev:
-	fastapi dev src/innsight/app.py
+	poetry run fastapi dev src/innsight/app.py
