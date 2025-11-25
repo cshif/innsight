@@ -332,3 +332,22 @@ def create_app() -> FastAPI:
 
 # Create the app instance for FastAPI CLI
 app = create_app()
+
+
+def main() -> int:
+    """Entry point for running the API server via CLI command."""
+    import uvicorn
+
+    uvicorn.run(
+        "innsight.app:app",
+        host="0.0.0.0",
+        port=8000,
+        log_level="info"
+    )
+
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
