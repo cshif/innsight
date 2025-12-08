@@ -8,6 +8,7 @@ from slowapi.errors import RateLimitExceeded
 import hashlib
 import json
 import os
+import sys
 import time
 from datetime import datetime, UTC
 from pathlib import Path
@@ -113,6 +114,27 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.on_event("startup")
+    async def startup_event():
+        """Application startup event handler."""
+        logger.info(
+            "Application started successfully",
+            version=get_version(),
+            environment=config.env,
+            python_version=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            start_time=datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        )
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """Application shutdown event handler."""
+        uptime = int(time.time() - _START_TIME)
+        logger.info(
+            "Application shutting down",
+            uptime_seconds=uptime,
+            uptime_human=f"{uptime // 3600}h {(uptime % 3600) // 60}m {uptime % 60}s"
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request, exc):
