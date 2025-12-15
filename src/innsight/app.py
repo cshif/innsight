@@ -196,6 +196,7 @@ def create_app() -> FastAPI:
     def get_recommender() -> Recommender:
         return Recommender()
 
+    @limiter.limit("30/minute")
     @app.get("/health")
     async def health_check():
         """Basic health check endpoint.
