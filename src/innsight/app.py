@@ -198,7 +198,7 @@ def create_app() -> FastAPI:
 
     @limiter.limit("30/minute")
     @app.get("/health")
-    async def health_check():
+    async def health_check(request: Request):
         """Basic health check endpoint.
 
         Returns the application health status, current timestamp, and version.
