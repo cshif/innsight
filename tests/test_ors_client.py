@@ -3,6 +3,7 @@
 測試 ORS Client 的完整功能
 包括正常功能、錯誤處理、API 超時、503 錯誤、rate-limit 重試、快取回退等場景
 """
+import json
 import os
 import sys
 import time
@@ -10,6 +11,7 @@ from unittest.mock import Mock, patch, call
 import pytest
 from requests.exceptions import HTTPError, Timeout, ConnectionError
 from json import JSONDecodeError
+from io import StringIO
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -358,18 +360,14 @@ class TestStructuredLogging:
         _fallback_cache.clear()
         get_isochrones_by_minutes.cache_clear()
 
-    def test_api_success_logged_with_latency(self, monkeypatch):
+    def test_api_success_logged_with_latency(self, monkeypatch, app_config):
         """Test that successful API call logs include latency."""
-        # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
-        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
-        from io import StringIO
         from innsight.logging_config import configure_logging
-        import json
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # Mock successful API call
         with patch.dict(os.environ, TEST_ENV):
@@ -407,18 +405,14 @@ class TestStructuredLogging:
         assert log_data["latency_ms"] > 0
         assert log_data["success"] is True
 
-    def test_retry_logged_with_details(self, monkeypatch):
+    def test_retry_logged_with_details(self, monkeypatch, app_config):
         """Test that retry attempts log structured details."""
-        # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
-        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
-        from io import StringIO
         from innsight.logging_config import configure_logging
-        import json
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # Mock: First call fails with Timeout, second succeeds
         with patch.dict(os.environ, TEST_ENV):
@@ -463,18 +457,14 @@ class TestStructuredLogging:
         assert log_data["error_type"] == "Timeout"
         assert "retry_delay_seconds" in log_data
 
-    def test_failure_logged_with_error_type(self, monkeypatch):
+    def test_failure_logged_with_error_type(self, monkeypatch, app_config):
         """Test that final failure logs include error type and total attempts."""
-        # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
-        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
-        from io import StringIO
         from innsight.logging_config import configure_logging
-        import json
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # Mock: All attempts fail with Timeout
         with patch.dict(os.environ, TEST_ENV):

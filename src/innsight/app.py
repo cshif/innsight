@@ -82,7 +82,7 @@ def create_app() -> FastAPI:
     config = AppConfig.from_env()
 
     # Configure structured logging
-    configure_logging()
+    configure_logging(config)
 
     # Warn if version couldn't be read
     if _VERSION == "unknown":

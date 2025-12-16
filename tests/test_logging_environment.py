@@ -12,13 +12,19 @@ class TestEnvironmentBasedLogging:
 
     def test_production_environment_defaults_to_json_format(self, monkeypatch):
         """In production, LOG_FORMAT should default to 'json'."""
+        monkeypatch.setenv("API_ENDPOINT", "http://test-api.com")
+        monkeypatch.setenv("ORS_URL", "http://test-ors.com")
+        monkeypatch.setenv("ORS_API_KEY", "test-ors-api-key")
         monkeypatch.setenv("ENV", "prod")
         # Don't set LOG_FORMAT explicitly
         monkeypatch.delenv("LOG_FORMAT", raising=False)
         monkeypatch.delenv("LOG_LEVEL", raising=False)
 
+        from innsight.config import AppConfig
+        prod_config = AppConfig.from_env()
+
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(prod_config, stream=output)
 
         logger = get_logger(__name__)
         logger.info("test message")
@@ -28,14 +34,14 @@ class TestEnvironmentBasedLogging:
         log_data = json.loads(log_line)
         assert log_data["message"] == "test message"
 
-    def test_development_environment_defaults_to_text_format(self, monkeypatch):
+    def test_development_environment_defaults_to_text_format(self, monkeypatch, app_config):
         """In development, LOG_FORMAT should default to 'text'."""
         monkeypatch.setenv("ENV", "local")
         monkeypatch.delenv("LOG_FORMAT", raising=False)
         monkeypatch.delenv("LOG_LEVEL", raising=False)
 
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(app_config, stream=output)
 
         logger = get_logger(__name__)
         logger.info("test message")
@@ -48,12 +54,18 @@ class TestEnvironmentBasedLogging:
 
     def test_production_environment_defaults_to_info_level(self, monkeypatch):
         """In production, LOG_LEVEL should default to 'INFO'."""
+        monkeypatch.setenv("API_ENDPOINT", "http://test-api.com")
+        monkeypatch.setenv("ORS_URL", "http://test-ors.com")
+        monkeypatch.setenv("ORS_API_KEY", "test-ors-api-key")
         monkeypatch.setenv("ENV", "prod")
         monkeypatch.setenv("LOG_FORMAT", "json")  # Force JSON for easy parsing
         monkeypatch.delenv("LOG_LEVEL", raising=False)
 
+        from innsight.config import AppConfig
+        prod_config = AppConfig.from_env()
+
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(prod_config, stream=output)
 
         logger = get_logger(__name__)
         logger.debug("debug message")
@@ -66,14 +78,14 @@ class TestEnvironmentBasedLogging:
         assert log_data["message"] == "info message"
         assert log_data["level"] == "info"
 
-    def test_development_environment_defaults_to_debug_level(self, monkeypatch):
+    def test_development_environment_defaults_to_debug_level(self, monkeypatch, app_config):
         """In development, LOG_LEVEL should default to 'DEBUG'."""
         monkeypatch.setenv("ENV", "local")
         monkeypatch.setenv("LOG_FORMAT", "json")  # Force JSON for easy parsing
         monkeypatch.delenv("LOG_LEVEL", raising=False)
 
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(app_config, stream=output)
 
         logger = get_logger(__name__)
         logger.debug("debug message")
@@ -89,11 +101,17 @@ class TestEnvironmentBasedLogging:
 
     def test_explicit_log_format_overrides_environment(self, monkeypatch):
         """Explicit LOG_FORMAT should override ENV-based defaults."""
+        monkeypatch.setenv("API_ENDPOINT", "http://test-api.com")
+        monkeypatch.setenv("ORS_URL", "http://test-ors.com")
+        monkeypatch.setenv("ORS_API_KEY", "test-ors-api-key")
         monkeypatch.setenv("ENV", "prod")
         monkeypatch.setenv("LOG_FORMAT", "text")  # Override default
 
+        from innsight.config import AppConfig
+        prod_config = AppConfig.from_env()
+
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(prod_config, stream=output)
 
         logger = get_logger(__name__)
         logger.info("test message")
@@ -104,14 +122,14 @@ class TestEnvironmentBasedLogging:
         with pytest.raises(json.JSONDecodeError):
             json.loads(log_line)
 
-    def test_explicit_log_level_overrides_environment(self, monkeypatch):
+    def test_explicit_log_level_overrides_environment(self, monkeypatch, app_config):
         """Explicit LOG_LEVEL should override ENV-based defaults."""
         monkeypatch.setenv("ENV", "local")
         monkeypatch.setenv("LOG_LEVEL", "WARNING")  # Override default
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(app_config, stream=output)
 
         logger = get_logger(__name__)
         logger.debug("debug message")
@@ -130,11 +148,17 @@ class TestLoggingContextEnrichment:
 
     def test_logs_include_environment_field(self, monkeypatch):
         """All logs should include the 'environment' field."""
+        monkeypatch.setenv("API_ENDPOINT", "http://test-api.com")
+        monkeypatch.setenv("ORS_URL", "http://test-ors.com")
+        monkeypatch.setenv("ORS_API_KEY", "test-ors-api-key")
         monkeypatch.setenv("ENV", "prod")
         monkeypatch.setenv("LOG_FORMAT", "json")
 
+        from innsight.config import AppConfig
+        prod_config = AppConfig.from_env()
+
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(prod_config, stream=output)
 
         logger = get_logger(__name__)
         logger.info("test message")
@@ -143,13 +167,13 @@ class TestLoggingContextEnrichment:
         assert "environment" in log_data
         assert log_data["environment"] == "prod"
 
-    def test_logs_include_app_version_field(self, monkeypatch):
+    def test_logs_include_app_version_field(self, monkeypatch, app_config):
         """All logs should include the 'app_version' field."""
         monkeypatch.setenv("ENV", "local")
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(app_config, stream=output)
 
         logger = get_logger(__name__)
         logger.info("test message")
@@ -161,11 +185,17 @@ class TestLoggingContextEnrichment:
 
     def test_environment_field_reflects_current_env(self, monkeypatch):
         """Environment field should reflect the current ENV setting."""
+        monkeypatch.setenv("API_ENDPOINT", "http://test-api.com")
+        monkeypatch.setenv("ORS_URL", "http://test-ors.com")
+        monkeypatch.setenv("ORS_API_KEY", "test-ors-api-key")
         monkeypatch.setenv("ENV", "dev")
         monkeypatch.setenv("LOG_FORMAT", "json")
 
+        from innsight.config import AppConfig
+        dev_config = AppConfig.from_env()
+
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(dev_config, stream=output)
 
         logger = get_logger(__name__)
         logger.info("test message")
@@ -173,13 +203,13 @@ class TestLoggingContextEnrichment:
         log_data = json.loads(output.getvalue().strip())
         assert log_data["environment"] == "dev"
 
-    def test_default_environment_is_local(self, monkeypatch):
+    def test_default_environment_is_local(self, monkeypatch, app_config):
         """If ENV is not set, default should be 'local'."""
         monkeypatch.delenv("ENV", raising=False)
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         output = StringIO()
-        configure_logging(stream=output)
+        configure_logging(app_config, stream=output)
 
         logger = get_logger(__name__)
         logger.info("test message")

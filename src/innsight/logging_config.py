@@ -55,46 +55,16 @@ def _rename_event_to_message(logger, method_name, event_dict):
     return event_dict
 
 
-def _add_environment_context(logger, method_name, event_dict):
-    """Add environment and version information to all log entries.
-
-    Enriches logs with:
-    - environment: Current environment (from ENV variable)
-    - app_version: Application version (from pyproject.toml)
-    """
-    event_dict["environment"] = os.getenv("ENV", "local")
-    event_dict["app_version"] = _get_app_version()
-    return event_dict
-
-
-def configure_logging(stream: Optional[TextIO] = None) -> None:
-    """Configure structured logging based on environment variables.
+def configure_logging(config: Optional['AppConfig'] = None, stream: Optional[TextIO] = None) -> None:
+    """Configure structured logging based on AppConfig.
 
     Args:
+        config: Optional AppConfig instance. If None, creates one from env.
         stream: Optional output stream for testing. If None, uses sys.stdout.
-
-    Environment Variables:
-        ENV: Environment name - "local", "dev", "prod" (default: "local")
-             Used to determine default LOG_FORMAT and LOG_LEVEL if not explicitly set.
-        LOG_FORMAT: Output format - "json" or "text"
-                   Default: "json" for prod, "text" for local/dev
-        LOG_LEVEL: Logging level - "DEBUG", "INFO", "WARNING", "ERROR"
-                  Default: "INFO" for prod, "DEBUG" for local/dev
     """
-    # Read environment type
-    env = os.getenv("ENV", "local")
-
-    # Determine defaults based on environment
-    if env == "prod":
-        default_format = "json"
-        default_level = "INFO"
-    else:
-        default_format = "text"
-        default_level = "DEBUG"
-
-    # Read environment variables with environment-based defaults
-    log_format = os.getenv("LOG_FORMAT", default_format).lower()
-    log_level = os.getenv("LOG_LEVEL", default_level).upper()
+    # Get settings from the config object
+    log_format = config.log_format
+    log_level = config.log_level.upper()
 
     # Convert log level string to logging constant
     numeric_level = getattr(logging, log_level, logging.INFO)
@@ -116,8 +86,15 @@ def configure_logging(stream: Optional[TextIO] = None) -> None:
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
-        _add_environment_context,  # Add environment and version info
-        _rename_event_to_message,  # Rename 'event' to 'message'
+
+        # Add environment and version info using a lambda that captures config
+        lambda logger, method_name, event_dict: {
+            **event_dict,
+            "environment": config.env,
+            "app_version": _get_app_version()
+        },
+
+        _rename_event_to_message,
     ]
 
     if log_format == "json":

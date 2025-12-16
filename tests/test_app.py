@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.innsight.app import create_app
+from innsight.config import AppConfig
+from tests.conftest import app_config
 
 
 class TestCreateApp:
@@ -313,8 +315,10 @@ class TestLoggingIntegration:
 
         # Then: configure_logging should be called
         mock_configure_logging.assert_called_once()
+        args, kwargs = mock_configure_logging.call_args
+        assert isinstance(args[0], AppConfig)
 
-    def test_app_uses_structlog_json_format(self, monkeypatch):
+    def test_app_uses_structlog_json_format(self, monkeypatch, app_config):
         """Test that app can output logs in JSON format."""
         # Given: Set environment to JSON mode
         monkeypatch.setenv("LOG_FORMAT", "json")
@@ -326,7 +330,7 @@ class TestLoggingIntegration:
         with patch('src.innsight.app.configure_logging') as mock_configure:
             # Configure the actual logging for testing
             from src.innsight.logging_config import configure_logging
-            configure_logging(stream=log_output)
+            configure_logging(app_config, stream=log_output)
 
             # Create app (which should use the configured logger)
             app = create_app()
@@ -347,17 +351,15 @@ class TestLoggingIntegration:
         assert log_data["message"] == "test message from app"
         assert log_data["key"] == "value"
 
-    def test_app_uses_structlog_text_format(self, monkeypatch):
+    def test_app_uses_structlog_text_format(self, monkeypatch, app_config):
         """Test that app can output logs in text format."""
         # Given: Set environment to text mode
         monkeypatch.setenv("LOG_FORMAT", "text")
 
-        # Capture log output
-        log_output = StringIO()
+        from innsight.logging_config import configure_logging
 
-        # When: Configure logging
-        from src.innsight.logging_config import configure_logging
-        configure_logging(stream=log_output)
+        log_output = StringIO()
+        configure_logging(app_config, stream=log_output)
 
         # Create logger and log a message
         from src.innsight.logging_config import get_logger
@@ -380,7 +382,7 @@ class TestLoggingIntegration:
 class TestStructuredLogging:
     """Test suite for structured logging in app and middleware."""
 
-    def test_successful_request_logged(self, monkeypatch):
+    def test_successful_request_logged(self, monkeypatch, app_config):
         """Test that successful API request logs include all required fields."""
         # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
@@ -406,7 +408,7 @@ class TestStructuredLogging:
             app = create_app()
 
             # Reconfigure logging to capture output after app creation
-            configure_logging(stream=log_output)
+            configure_logging(app_config, stream=log_output)
 
             client = TestClient(app)
 
@@ -435,7 +437,7 @@ class TestStructuredLogging:
         assert "duration_ms" in log_data
         assert "trace_id" in log_data  # Should be auto-included from context
 
-    def test_request_duration_logged(self, monkeypatch):
+    def test_request_duration_logged(self, monkeypatch, app_config):
         """Test that request duration is logged and is a positive number."""
         # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
@@ -461,7 +463,7 @@ class TestStructuredLogging:
             app = create_app()
 
             # Reconfigure logging to capture output after app creation
-            configure_logging(stream=log_output)
+            configure_logging(app_config, stream=log_output)
 
             client = TestClient(app)
 
@@ -489,7 +491,7 @@ class TestStructuredLogging:
         assert duration > 0
         assert duration < 5000  # Should be less than 5 seconds for test
 
-    def test_validation_error_logged(self, monkeypatch):
+    def test_validation_error_logged(self, monkeypatch, app_config):
         """Test that validation errors are logged with error details."""
         # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
@@ -508,7 +510,7 @@ class TestStructuredLogging:
             app = create_app()
 
             # Reconfigure logging to capture output after app creation
-            configure_logging(stream=log_output)
+            configure_logging(app_config, stream=log_output)
 
             client = TestClient(app)
 

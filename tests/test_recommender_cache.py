@@ -983,16 +983,14 @@ class TestStructuredLogging:
 
             self.recommender = Recommender()
 
-    def test_cache_hit_includes_structured_fields(self, monkeypatch):
+    def test_cache_hit_includes_structured_fields(self, monkeypatch, app_config):
         """Test that cache hit log includes structured fields."""
-        # Given: Configure logging to JSON format and capture output
         monkeypatch.setenv("LOG_FORMAT", "json")
-        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
         from innsight.logging_config import configure_logging
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # Add item to cache
         cache_key = "test_cache_key_12345678"
@@ -1027,16 +1025,14 @@ class TestStructuredLogging:
         assert "cache_max_size" in log_data
         assert log_data["cache_max_size"] == 100
 
-    def test_cache_miss_logged_with_reason(self, monkeypatch):
+    def test_cache_miss_logged_with_reason(self, monkeypatch, app_config):
         """Test that cache miss is logged with reason."""
-        # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
-        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
         from innsight.logging_config import configure_logging
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # When: Try to get from empty cache (should be cache miss with reason="not_found")
         cache_key = "nonexistent_key_123"
@@ -1061,16 +1057,14 @@ class TestStructuredLogging:
         assert log_data["cache_key"] == cache_key[:8]
         assert log_data["reason"] == "not_found"
 
-    def test_cache_miss_expired_logged_with_reason(self, monkeypatch):
+    def test_cache_miss_expired_logged_with_reason(self, monkeypatch, app_config):
         """Test that expired cache miss is logged with reason='expired'."""
-        # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
-        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
         from innsight.logging_config import configure_logging
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # Add item to cache
         cache_key = "expired_key_12345"
@@ -1109,16 +1103,14 @@ class TestStructuredLogging:
         assert log_data["cache_key"] == cache_key[:8]
         assert log_data["reason"] == "expired"
 
-    def test_parsing_failure_logged_with_details(self, monkeypatch):
+    def test_parsing_failure_logged_with_details(self, monkeypatch, app_config):
         """Test that parsing failure is logged with query and error details."""
-        # Given: Configure logging to JSON format
         monkeypatch.setenv("LOG_FORMAT", "json")
-        monkeypatch.setenv("LOG_LEVEL", "DEBUG")
 
         from innsight.logging_config import configure_logging
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # Mock parse_query to raise an exception
         with patch('innsight.pipeline.parse_query') as mock_parse:

@@ -145,7 +145,8 @@ class AppConfig:
     @property
     def log_format(self) -> str:
         """Get log format based on environment."""
-        return "json" if self.is_production else "text"
+        default_format = "json" if self.is_production else "text"
+        return os.getenv("LOG_FORMAT", default_format)
 
     @property
     def log_level(self) -> str:

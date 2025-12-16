@@ -1,30 +1,24 @@
 """Tests for logging configuration."""
 
 import json
-import os
 from io import StringIO
-import logging
 import threading
 import time
 
 import pytest
-import structlog
 
 
 class TestLoggingConfig:
     """Test suite for logging configuration."""
 
-    def test_json_format_output(self, monkeypatch):
+    def test_json_format_output(self, monkeypatch, app_config):
         """Test that JSON format outputs valid JSON."""
-        # Set environment to JSON mode
         monkeypatch.setenv("LOG_FORMAT", "json")
 
-        # Import after setting environment variable
         from innsight.logging_config import configure_logging, get_logger
 
-        # Capture log output
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         logger = get_logger("test")
         logger.info("test message", key="value")
@@ -43,16 +37,14 @@ class TestLoggingConfig:
         assert log_data["message"] == "test message"
         assert log_data["key"] == "value"
 
-    def test_text_format_output(self, monkeypatch):
+    def test_text_format_output(self, monkeypatch, app_config):
         """Test that text format outputs human-readable text."""
-        # Set environment to text mode
         monkeypatch.setenv("LOG_FORMAT", "text")
 
         from innsight.logging_config import configure_logging, get_logger
 
-        # Capture log output
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         logger = get_logger("test")
         logger.info("test message")
@@ -68,16 +60,15 @@ class TestLoggingConfig:
         # Should contain the message
         assert "test message" in log_line
 
-    def test_log_level_filtering(self, monkeypatch):
+    def test_log_level_filtering(self, monkeypatch, app_config):
         """Test that log level filtering works correctly."""
         monkeypatch.setenv("LOG_FORMAT", "json")
         monkeypatch.setenv("LOG_LEVEL", "INFO")
 
         from innsight.logging_config import configure_logging, get_logger
 
-        # Capture log output
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         logger = get_logger("test")
         logger.debug("debug message")  # Should be filtered out
@@ -92,15 +83,14 @@ class TestLoggingConfig:
         # INFO should appear
         assert "info message" in output
 
-    def test_required_fields_present(self, monkeypatch):
+    def test_required_fields_present(self, monkeypatch, app_config):
         """Test that JSON output contains all required fields."""
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         from innsight.logging_config import configure_logging, get_logger
 
-        # Capture log output
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         logger = get_logger("test.module")
         logger.info("test message")
@@ -122,19 +112,20 @@ class TestLoggingConfig:
         assert "T" in log_data["timestamp"]
         assert "Z" in log_data["timestamp"] or "+" in log_data["timestamp"]
 
-    def test_environment_variable_switching(self, monkeypatch):
+    def test_environment_variable_switching(self, monkeypatch, app_config):
         """Test that LOG_FORMAT environment variable switches output format."""
+        monkeypatch.setenv("LOG_FORMAT", "json")
+
         from innsight.logging_config import configure_logging, get_logger
 
-        # Test JSON format
-        monkeypatch.setenv("LOG_FORMAT", "json")
-        log_output_json = StringIO()
-        configure_logging(stream=log_output_json)
+        log_output = StringIO()
+        configure_logging(app_config, stream=log_output)
+
         logger = get_logger("test")
         logger.info("test")
 
-        log_output_json.seek(0)
-        json_line = log_output_json.readline().strip()
+        log_output.seek(0)
+        json_line = log_output.readline().strip()
 
         # Should be valid JSON
         json_data = json.loads(json_line)
@@ -143,7 +134,7 @@ class TestLoggingConfig:
         # Test text format
         monkeypatch.setenv("LOG_FORMAT", "text")
         log_output_text = StringIO()
-        configure_logging(stream=log_output_text)
+        configure_logging(app_config, stream=log_output_text)
         logger = get_logger("test")
         logger.info("test")
 
@@ -158,15 +149,14 @@ class TestLoggingConfig:
 class TestContextBinding:
     """Test suite for trace_id context binding."""
 
-    def test_bind_trace_id(self, monkeypatch):
+    def test_bind_trace_id(self, monkeypatch, app_config):
         """Test that trace_id can be bound to the logging context."""
-        # Given: Configure logging in JSON mode
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         from innsight.logging_config import configure_logging, get_logger, bind_trace_id
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # When: Bind a trace_id and log a message
         bind_trace_id("req_test1234")
@@ -181,15 +171,14 @@ class TestContextBinding:
         assert "trace_id" in log_data
         assert log_data["trace_id"] == "req_test1234"
 
-    def test_trace_id_in_log_output(self, monkeypatch):
+    def test_trace_id_in_log_output(self, monkeypatch, app_config):
         """Test that trace_id appears in JSON log output."""
-        # Given: Configure logging and bind trace_id
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         from innsight.logging_config import configure_logging, get_logger, bind_trace_id
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         bind_trace_id("req_abcd1234")
 
@@ -206,15 +195,14 @@ class TestContextBinding:
         assert log_data["message"] == "cache hit"
         assert log_data["cache_key"] == "xyz"
 
-    def test_multiple_loggers_share_context(self, monkeypatch):
+    def test_multiple_loggers_share_context(self, monkeypatch, app_config):
         """Test that different loggers share the same trace_id context."""
-        # Given: Configure logging and bind trace_id
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         from innsight.logging_config import configure_logging, get_logger, bind_trace_id
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         bind_trace_id("req_shared99")
 
@@ -237,15 +225,14 @@ class TestContextBinding:
         assert log_data_1["trace_id"] == "req_shared99"
         assert log_data_2["trace_id"] == "req_shared99"
 
-    def test_context_isolation(self, monkeypatch):
+    def test_context_isolation(self, monkeypatch, app_config):
         """Test that different threads have isolated trace_id contexts."""
-        # Given: Configure logging
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         from innsight.logging_config import configure_logging, get_logger, bind_trace_id, clear_trace_id
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         # Shared data structure to collect results
         results = {}
@@ -283,15 +270,14 @@ class TestContextBinding:
         assert results[1] == "req_thread001"
         assert results[2] == "req_thread002"
 
-    def test_clear_trace_id(self, monkeypatch):
+    def test_clear_trace_id(self, monkeypatch, app_config):
         """Test that clear_trace_id removes trace_id from context."""
-        # Given: Configure logging and bind trace_id
         monkeypatch.setenv("LOG_FORMAT", "json")
 
         from innsight.logging_config import configure_logging, get_logger, bind_trace_id, clear_trace_id
 
         log_output = StringIO()
-        configure_logging(stream=log_output)
+        configure_logging(app_config, stream=log_output)
 
         logger = get_logger("test")
 
