@@ -32,6 +32,10 @@ def create_mock_config():
         mock_config.recommender_cache_ttl_seconds = 0
         mock_config.recommender_cache_maxsize = 20
         mock_config.recommender_cache_cleanup_interval = 60
+        mock_config.api_endpoint = 'https://mock.api'
+        mock_config.nominatim_user_agent = 'test'
+        mock_config.rating_weights = {}
+        mock_config.default_isochrone_intervals = []
 
         for key, value in overrides.items():
             setattr(mock_config, key, value)

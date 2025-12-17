@@ -1133,20 +1133,24 @@ class TestSecurityHeaders:
     """Test suite for security headers."""
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_includes_x_content_type_options_header(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
         """Test that /recommend response includes X-Content-Type-Options: nosniff header."""
         # Arrange
-        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
         mock_config = create_mock_config()
         mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
@@ -1164,20 +1168,24 @@ class TestSecurityHeaders:
         assert response.headers["x-content-type-options"] == "nosniff"
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_includes_x_frame_options_header(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
         """Test that /recommend response includes X-Frame-Options: DENY header."""
         # Arrange
-        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
         mock_config = create_mock_config()
         mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
@@ -1195,20 +1203,24 @@ class TestSecurityHeaders:
         assert response.headers["x-frame-options"] == "DENY"
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_includes_referrer_policy_header(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
         """Test that /recommend response includes Referrer-Policy: strict-origin-when-cross-origin header."""
         # Arrange
-        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
         mock_config = create_mock_config()
         mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
@@ -1227,12 +1239,14 @@ class TestSecurityHeaders:
 
     @patch.dict('os.environ', {'ENV': 'prod'})
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_includes_hsts_header_in_production(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
@@ -1241,6 +1255,8 @@ class TestSecurityHeaders:
         mock_config = create_mock_config(env='prod', is_production=True)
         mock_config_from_env.return_value = mock_config
         mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
@@ -1259,21 +1275,24 @@ class TestSecurityHeaders:
 
     @patch.dict('os.environ', {'ENV': 'local'})
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_excludes_hsts_header_in_local(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
         """Test that /recommend response does not include Strict-Transport-Security header in local environment."""
         # Arrange
-        # Need to recreate app after environment change
         mock_config = create_mock_config(env='local', is_production=False)
         mock_config_from_env.return_value = mock_config
         mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
@@ -1290,12 +1309,14 @@ class TestSecurityHeaders:
         assert "strict-transport-security" not in response.headers
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_excludes_hsts_header_when_env_not_set(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
@@ -1309,6 +1330,8 @@ class TestSecurityHeaders:
             mock_config = create_mock_config()
             mock_config_from_env.return_value = mock_config
             mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+            mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+            mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
             app = create_app()
             client = TestClient(app)
@@ -1329,12 +1352,14 @@ class TestSecurityHeaders:
                 os.environ['ENV'] = env_backup
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_includes_csp_header(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
@@ -1343,6 +1368,8 @@ class TestSecurityHeaders:
         mock_config = create_mock_config()
         mock_config_from_env.return_value = mock_config
         mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
@@ -1360,12 +1387,14 @@ class TestSecurityHeaders:
         assert response.headers["content-security-policy"] == "default-src 'none'; frame-ancestors 'none'"
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_includes_permissions_policy_header(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
@@ -1374,6 +1403,8 @@ class TestSecurityHeaders:
         mock_config = create_mock_config()
         mock_config_from_env.return_value = mock_config
         mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
@@ -1392,12 +1423,14 @@ class TestSecurityHeaders:
         assert response.headers["permissions-policy"] == expected_policy
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_includes_coop_header(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
@@ -1406,6 +1439,8 @@ class TestSecurityHeaders:
         mock_config = create_mock_config()
         mock_config_from_env.return_value = mock_config
         mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
@@ -1423,12 +1458,14 @@ class TestSecurityHeaders:
         assert response.headers["cross-origin-opener-policy"] == "same-origin"
 
     @patch('src.innsight.pipeline.AppConfig.from_env')
-    @patch('src.innsight.pipeline.AccommodationSearchService')
+    @patch('src.innsight.pipeline.GeocodeService')
+    @patch('src.innsight.pipeline.IsochroneService')
     @patch('src.innsight.pipeline.RecommenderCore')
     def test_recommend_response_includes_corp_header(
         self,
         mock_recommender_class,
-        mock_search_service_class,
+        mock_isochrone_class,
+        mock_geocode_class,
         mock_config_from_env,
         create_mock_config
     ):
@@ -1437,6 +1474,8 @@ class TestSecurityHeaders:
         mock_config = create_mock_config()
         mock_config_from_env.return_value = mock_config
         mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_geocode_class.return_value.geocode_location_detailed.return_value = None
+        mock_isochrone_class.return_value.get_isochrones_with_fallback.return_value = None
 
         app = create_app()
         client = TestClient(app)
