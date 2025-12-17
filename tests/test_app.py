@@ -8,8 +8,7 @@ from fastapi.testclient import TestClient
 import geopandas as gpd
 
 from src.innsight.app import create_app
-from innsight.config import AppConfig
-from tests.conftest import app_config
+from src.innsight.config import AppConfig
 
 
 class TestCreateApp:
