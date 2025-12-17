@@ -5,6 +5,7 @@ from io import StringIO
 from unittest.mock import patch, Mock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import geopandas as gpd
 
 from src.innsight.app import create_app
 from innsight.config import AppConfig
@@ -38,7 +39,7 @@ class TestCreateApp:
         assert app1.title == "InnSight API"
         assert app2.title == "InnSight API"
     
-    def test_consecutive_create_app_calls_external_dependencies(self):
+    def test_consecutive_create_app_calls_external_dependencies(self, create_mock_config):
         """Test that consecutive create_app calls don't duplicate external connections."""
         # Given: Mock the external dependencies at the point where they're imported
         with patch('src.innsight.pipeline.AppConfig.from_env') as mock_config_from_env, \
@@ -46,7 +47,7 @@ class TestCreateApp:
              patch('src.innsight.pipeline.RecommenderCore') as mock_recommender_core_class:
             
             # Setup mocks
-            mock_config = Mock()
+            mock_config = create_mock_config()
             mock_config_from_env.return_value = mock_config
             
             mock_search_service = Mock()
@@ -86,7 +87,7 @@ class TestCreateApp:
         recommend_route = next(route for route in app.routes if route.path == "/recommend")
         assert "POST" in recommend_route.methods
     
-    def test_create_app_multiple_calls_verify_no_external_duplication(self):
+    def test_create_app_multiple_calls_verify_no_external_duplication(self, create_mock_config):
         """Test that multiple create_app calls don't cause external HTTP/DB connections.
         
         This test documents the current behavior and verifies that consecutive calls
@@ -94,14 +95,15 @@ class TestCreateApp:
         duplicate external connections (verified through mocking).
         """
         # Given: Mock all external dependencies to verify they're not called
-        with patch('src.innsight.pipeline.AppConfig.from_env') as mock_config, \
-             patch('src.innsight.pipeline.AccommodationSearchService') as mock_service, \
-             patch('src.innsight.pipeline.RecommenderCore') as mock_recommender_core:
+        with patch('src.innsight.pipeline.AppConfig.from_env') as mock_config_from_env, \
+             patch('src.innsight.pipeline.AccommodationSearchService') as mock_service_class, \
+             patch('src.innsight.pipeline.RecommenderCore') as mock_recommender_class:
             
             # Setup minimal mocks to prevent actual external calls
-            mock_config.return_value = Mock()
-            mock_service.return_value = Mock()
-            mock_recommender_core.return_value = Mock()
+            mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+            mock_service_class.return_value = Mock()
+            mock_config = create_mock_config()
+            mock_config_from_env.return_value = mock_config
             
             # When: Call create_app twice consecutively  
             app1 = create_app()

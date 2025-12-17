@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch
 import geopandas as gpd
 import time
-import os
 
 from src.innsight.app import create_app
 
@@ -1133,32 +1132,27 @@ class TestHTTPCaching:
 class TestSecurityHeaders:
     """Test suite for security headers."""
 
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.app = create_app()
-        self.client = TestClient(self.app)
-
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_x_content_type_options_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_includes_x_content_type_options_header(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response includes X-Content-Type-Options: nosniff header."""
         # Arrange
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_config = create_mock_config()
+        mock_config_from_env.return_value = mock_config
 
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
+        app = create_app()
+        client = TestClient(app)
 
         # Act
-        response = self.client.post("/recommend", json={
+        response = client.post("/recommend", json={
             "query": "台北101附近住宿"
         })
 
@@ -1172,24 +1166,24 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_x_frame_options_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_includes_x_frame_options_header(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response includes X-Frame-Options: DENY header."""
         # Arrange
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_config = create_mock_config()
+        mock_config_from_env.return_value = mock_config
 
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
+        app = create_app()
+        client = TestClient(app)
 
         # Act
-        response = self.client.post("/recommend", json={
+        response = client.post("/recommend", json={
             "query": "台北101附近住宿"
         })
 
@@ -1203,24 +1197,24 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_referrer_policy_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_includes_referrer_policy_header(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response includes Referrer-Policy: strict-origin-when-cross-origin header."""
         # Arrange
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+        mock_config = create_mock_config()
+        mock_config_from_env.return_value = mock_config
 
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
+        app = create_app()
+        client = TestClient(app)
 
         # Act
-        response = self.client.post("/recommend", json={
+        response = client.post("/recommend", json={
             "query": "台北101附近住宿"
         })
 
@@ -1235,26 +1229,21 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_hsts_header_in_production(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_includes_hsts_header_in_production(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response includes Strict-Transport-Security header in production environment."""
         # Arrange
-        # Need to recreate app after environment change
-        from src.innsight.app import create_app
+        mock_config = create_mock_config(env='prod', is_production=True)
+        mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+
         app = create_app()
         client = TestClient(app)
-
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
-
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
 
         # Act
         response = client.post("/recommend", json={
@@ -1272,26 +1261,22 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_excludes_hsts_header_in_local(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_excludes_hsts_header_in_local(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response does not include Strict-Transport-Security header in local environment."""
         # Arrange
         # Need to recreate app after environment change
-        from src.innsight.app import create_app
+        mock_config = create_mock_config(env='local', is_production=False)
+        mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+
         app = create_app()
         client = TestClient(app)
-
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
-
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
 
         # Act
         response = client.post("/recommend", json={
@@ -1307,7 +1292,13 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_excludes_hsts_header_when_env_not_set(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_excludes_hsts_header_when_env_not_set(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response does not include Strict-Transport-Security header when ENV is not set (defaults to local)."""
         # Arrange
         # Ensure ENV is not set (default behavior)
@@ -1315,23 +1306,12 @@ class TestSecurityHeaders:
         env_backup = os.environ.pop('ENV', None)
 
         try:
-            # Need to recreate app without ENV
-            from src.innsight.app import create_app
+            mock_config = create_mock_config()
+            mock_config_from_env.return_value = mock_config
+            mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
+
             app = create_app()
             client = TestClient(app)
-
-            mock_gdf = gpd.GeoDataFrame({
-                'name': ['Hotel A'],
-                'score': [85.0],
-                'tier': [1],
-                'lat': [25.0330],
-                'lon': [121.5654],
-                'tags': [{}]
-            })
-
-            mock_recommender = Mock()
-            mock_recommender.recommend.return_value = mock_gdf
-            mock_recommender_class.return_value = mock_recommender
 
             # Act
             response = client.post("/recommend", json={
@@ -1351,24 +1331,24 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_csp_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_includes_csp_header(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response includes Content-Security-Policy header."""
         # Arrange
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
+        mock_config = create_mock_config()
+        mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
 
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
+        app = create_app()
+        client = TestClient(app)
 
         # Act
-        response = self.client.post("/recommend", json={
+        response = client.post("/recommend", json={
             "query": "台北101附近住宿"
         })
 
@@ -1382,24 +1362,24 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_permissions_policy_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_includes_permissions_policy_header(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response includes Permissions-Policy header."""
         # Arrange
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
+        mock_config = create_mock_config()
+        mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
 
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
+        app = create_app()
+        client = TestClient(app)
 
         # Act
-        response = self.client.post("/recommend", json={
+        response = client.post("/recommend", json={
             "query": "台北101附近住宿"
         })
 
@@ -1414,24 +1394,24 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_coop_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_includes_coop_header(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response includes Cross-Origin-Opener-Policy header."""
         # Arrange
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
+        mock_config = create_mock_config()
+        mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
 
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
+        app = create_app()
+        client = TestClient(app)
 
         # Act
-        response = self.client.post("/recommend", json={
+        response = client.post("/recommend", json={
             "query": "台北101附近住宿"
         })
 
@@ -1445,24 +1425,24 @@ class TestSecurityHeaders:
     @patch('src.innsight.pipeline.AppConfig.from_env')
     @patch('src.innsight.pipeline.AccommodationSearchService')
     @patch('src.innsight.pipeline.RecommenderCore')
-    def test_recommend_response_includes_corp_header(self, mock_recommender_class, mock_search_service_class, mock_config):
+    def test_recommend_response_includes_corp_header(
+        self,
+        mock_recommender_class,
+        mock_search_service_class,
+        mock_config_from_env,
+        create_mock_config
+    ):
         """Test that /recommend response includes Cross-Origin-Resource-Policy header."""
         # Arrange
-        mock_gdf = gpd.GeoDataFrame({
-            'name': ['Hotel A'],
-            'score': [85.0],
-            'tier': [1],
-            'lat': [25.0330],
-            'lon': [121.5654],
-            'tags': [{}]
-        })
+        mock_config = create_mock_config()
+        mock_config_from_env.return_value = mock_config
+        mock_recommender_class.return_value.recommend.return_value = gpd.GeoDataFrame()
 
-        mock_recommender = Mock()
-        mock_recommender.recommend.return_value = mock_gdf
-        mock_recommender_class.return_value = mock_recommender
+        app = create_app()
+        client = TestClient(app)
 
         # Act
-        response = self.client.post("/recommend", json={
+        response = client.post("/recommend", json={
             "query": "台北101附近住宿"
         })
 
