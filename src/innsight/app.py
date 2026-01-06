@@ -206,7 +206,7 @@ def create_app() -> FastAPI:
         """
         return {
             "status": "healthy",
-            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "version": get_version()
         }
 
@@ -242,7 +242,7 @@ def create_app() -> FastAPI:
 
         response_data = {
             "status": status,
-            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "services": {
                 "nominatim": nominatim_result,
                 "ors": ors_result,
@@ -293,7 +293,7 @@ def create_app() -> FastAPI:
         # Build response
         response_data = {
             "status": status,
-            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "version": get_version(),
             "uptime_seconds": uptime_seconds,
             "external_services": {

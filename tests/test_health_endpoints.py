@@ -34,7 +34,7 @@ class TestHealthEndpoint:
 
         data = response.json()
         assert "status" in data
-        assert "timestamp" in data
+        assert "ts" in data
         assert "version" in data
 
     def test_health_endpoint_status_is_healthy(self):
@@ -51,7 +51,7 @@ class TestHealthEndpoint:
         assert response.status_code == 200
 
         data = response.json()
-        timestamp = data["timestamp"]
+        timestamp = data["ts"]
 
         # Try to parse the timestamp as ISO 8601
         try:
@@ -227,7 +227,7 @@ class TestReadyEndpoint:
 
         # Check required top-level fields
         assert "status" in data
-        assert "timestamp" in data
+        assert "ts" in data
         assert "services" in data
 
     @patch('src.innsight.health.check_overpass_health')
@@ -380,7 +380,7 @@ class TestReadyEndpoint:
         response = self.client.get("/api/ready")
         data = response.json()
 
-        timestamp = data["timestamp"]
+        timestamp = data["ts"]
 
         # Try to parse the timestamp as ISO 8601
         try:
@@ -470,7 +470,7 @@ class TestStatusEndpoint:
 
         # Check required top-level fields
         assert "status" in data
-        assert "timestamp" in data
+        assert "ts" in data
         assert "version" in data
         assert "uptime_seconds" in data
         assert "external_services" in data
@@ -541,7 +541,7 @@ class TestStatusEndpoint:
         response = self.client.get("/api/status")
         data = response.json()
 
-        timestamp = data["timestamp"]
+        timestamp = data["ts"]
         # Try to parse the timestamp as ISO 8601
         try:
             datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
