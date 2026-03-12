@@ -37,6 +37,18 @@ cp .env.sample .env
 | `ORS_API_KEY` | OpenRouteService API key |
 | `OVERPASS_URL` | Overpass API endpoint    |
 
+### LLM Query Parser (Optional)
+
+Set these variables to let an LLM convert free-form Chinese queries into structured JSON before the heuristic parser runs:
+
+| Variable | Description |
+|:---|:---|
+| `LLM_PARSER_ENABLED` | Set to `true` to enable the LLM parser |
+| `LLM_PARSER_API_KEY` | API key for your model provider (e.g., Anthropic) |
+| `LLM_PARSER_MODEL` | Model identifier such as `claude-3-5-sonnet-20241022` |
+| `LLM_PARSER_API_URL` | Messages endpoint URL (defaults to Anthropic) |
+| `LLM_PARSER_API_VERSION` | API version header required by the provider |
+
 ## Usage
 
 ### API Server

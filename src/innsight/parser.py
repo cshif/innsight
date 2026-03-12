@@ -15,6 +15,7 @@ from typing import List, Optional, Dict, Set
 
 from .utils import combine_tokens
 from .exceptions import DaysOutOfRangeError, ParseConflictError, ParseError
+from .llm_parser import LLMQueryParser
 
 
 class ChineseNumberParser:
@@ -326,14 +327,15 @@ class JiebaTokenizer:
 
 
 class QueryParser:
-    """Main parser class that combines days, filters, POI, and location extraction."""
+    """Main parser that tries LLM extraction before heuristic fallbacks."""
     
-    def __init__(self):
+    def __init__(self, llm_parser: Optional[LLMQueryParser] = None):
         self.days_extractor = DaysExtractor()
         self.filter_extractor = FilterExtractor()
         self.poi_extractor = PoiExtractor()
         self.location_extractor = LocationExtractor()
         self.tokenizer = JiebaTokenizer()
+        self.llm_parser = llm_parser or LLMQueryParser()
     
     def parse(self, text: str) -> Dict[str, any]:
         """
@@ -346,6 +348,14 @@ class QueryParser:
             dict: Dictionary containing 'days', 'filters', 'poi', and 'place' keys
         """
         try:
+            # Try LLM-based parsing first, fall back to heuristic parser on failure
+            llm_result = self._parse_with_llm(text)
+            if llm_result is not None:
+                try:
+                    return self._validate_and_format_result(llm_result)
+                except ParseError:
+                    pass  # Fall back to heuristic parsing if validation fails
+
             # Tokenize text
             tokens = self.tokenizer.tokenize(text)
             
@@ -362,7 +372,7 @@ class QueryParser:
             # Fallback: minimal parsing with raw text
             extraction_result = self._extract_all_components(text, [text])
             return self._validate_and_format_result(extraction_result)
-    
+
     def _extract_all_components(self, text: str, tokens: List[str]) -> Dict[str, any]:
         """Extract all components from text and tokens."""
         return {
@@ -371,6 +381,12 @@ class QueryParser:
             'poi': self.poi_extractor.extract(tokens),
             'place': self.location_extractor.extract(text)
         }
+
+    def _parse_with_llm(self, text: str) -> Optional[Dict[str, any]]:
+        """Attempt to parse query using the configured LLM parser."""
+        if not self.llm_parser:
+            return None
+        return self.llm_parser.parse(text)
     
     def _validate_and_format_result(self, extraction_result: Dict[str, any]) -> Dict[str, any]:
         """Validate and format the extraction result."""

@@ -991,5 +991,64 @@ class TestTestabilityImprovements:
         assert parser1 is not parser2
 
 
+class TestLLMQueryParser:
+    """Test suite for the optional LLM-based parser."""
+
+    def test_llm_parser_disabled_returns_none(self):
+        """Parser should no-op when not configured/enabled."""
+        from innsight.llm_parser import LLMQueryParser
+
+        parser = LLMQueryParser(enabled=False)
+        assert parser.parse("台北住兩天") is None
+
+    def test_llm_parser_normalizes_llm_response(self):
+        """LLM response is normalized into innsight parser schema."""
+        from unittest.mock import Mock
+        from innsight.llm_parser import LLMQueryParser
+
+        mock_response = Mock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "{\"days\": 3, \"filters\": [\"Parking\"], "
+                            "\"poi\": \"美ら海水族館\", \"place\": \"沖繩\"}"
+                }
+            ]
+        }
+
+        parser = LLMQueryParser(
+            enabled=True,
+            api_key="dummy",
+            http_client=lambda *_, **__: mock_response,
+        )
+
+        result = parser.parse("想去美ら海水族館三天兩夜，有停車場")
+        assert result is not None
+        assert result['days'] == 3
+        assert result['filters'] == ['parking']
+        assert result['poi'] == ['美ら海水族館']
+        assert result['place'] == '沖繩'
+
+
+class TestLLMIntegrationFallback:
+    """Ensure QueryParser gracefully falls back when LLM output is invalid."""
+
+    def test_query_parser_falls_back_to_heuristics(self):
+        """Invalid LLM output should trigger heuristic parsing."""
+        from innsight.parser import QueryParser
+
+        class DummyLLM:
+            def parse(self, text):  # pragma: no cover - trivial helper
+                return {'days': None, 'filters': [], 'poi': [], 'place': None}
+
+        parser = QueryParser(llm_parser=DummyLLM())
+        result = parser.parse("沖繩兩天一夜要停車位")
+
+        assert result['place'] == '沖繩'
+        assert result['poi'] == ''
+
+
 if __name__ == "__main__":
     main([__file__, "-v"])
