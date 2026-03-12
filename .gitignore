@@ -1,3 +1,4 @@
+playground
 .idea
 .venv
 .env
@@ -5,3 +6,10 @@
 !.env.sample
 backup_scripts
 report
+*.txt
+!docs/*.txt
+*.md
+!README.md
+*.log
+.envrc
+.claude
