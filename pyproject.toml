@@ -25,6 +25,7 @@ dependencies = [
 ]
 
 [project.scripts]
+innsight = "innsight.cli:main"
 innsight-cli = "innsight.cli:main"
 innsight-api = "innsight.app:main"
 
