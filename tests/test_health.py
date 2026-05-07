@@ -1,7 +1,7 @@
 """Tests for external API health check functions."""
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 import httpx
 
 # Import functions that will be implemented
@@ -22,7 +22,7 @@ class TestNominatimHealthCheck:
         from innsight.health import check_nominatim_health
 
         with patch('httpx.AsyncClient.get') as mock_get:
-            mock_response = AsyncMock()
+            mock_response = Mock()
             mock_response.status_code = 200
             mock_response.elapsed.total_seconds.return_value = 0.5
             mock_get.return_value = mock_response
@@ -55,7 +55,7 @@ class TestNominatimHealthCheck:
         from innsight.health import check_nominatim_health
 
         with patch('httpx.AsyncClient.get') as mock_get:
-            mock_response = AsyncMock()
+            mock_response = Mock()
             mock_response.status_code = 503
 
             # Create the exception with the response
@@ -103,7 +103,7 @@ class TestORSHealthCheck:
         from innsight.health import check_ors_health
 
         with patch('httpx.AsyncClient.get') as mock_get:
-            mock_response = AsyncMock()
+            mock_response = Mock()
             mock_response.status_code = 200
             mock_response.elapsed.total_seconds.return_value = 0.3
             mock_get.return_value = mock_response
@@ -136,7 +136,7 @@ class TestORSHealthCheck:
         from innsight.health import check_ors_health
 
         with patch('httpx.AsyncClient.get') as mock_get:
-            mock_response = AsyncMock()
+            mock_response = Mock()
             mock_response.status_code = 500
 
             # Create the exception with the response
@@ -183,7 +183,7 @@ class TestOverpassHealthCheck:
         from innsight.health import check_overpass_health
 
         with patch('httpx.AsyncClient.get') as mock_get:
-            mock_response = AsyncMock()
+            mock_response = Mock()
             mock_response.status_code = 200
             mock_response.elapsed.total_seconds.return_value = 0.4
             mock_get.return_value = mock_response
@@ -216,7 +216,7 @@ class TestOverpassHealthCheck:
         from innsight.health import check_overpass_health
 
         with patch('httpx.AsyncClient.get') as mock_get:
-            mock_response = AsyncMock()
+            mock_response = Mock()
             mock_response.status_code = 429
 
             # Create the exception with the response
