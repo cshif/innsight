@@ -21,7 +21,8 @@ dependencies = [
     "structlog (>=24.1.0,<25.0.0)",
     "typer (>=0.16.0,<0.17.0)",
     "gunicorn (>=23.0.0,<24.0.0)",
-    "slowapi (>=0.1.9)"
+    "slowapi (>=0.1.9)",
+    "pandas-stubs (>=2.3.3,<2.4.0)"
 ]
 
 [project.scripts]
